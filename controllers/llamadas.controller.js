@@ -1,53 +1,63 @@
 import axios from "axios";
+import { obtenerConfigCliente } from "../services/configCliente.js";
 import dotenv from "dotenv";
 dotenv.config();
 
-// 🔹 Configuración de agentes por tipo de llamada
-const agentes = {
-  presentacion: {
-    agent_id: process.env.AGENT_ID_PRESENTACION,
-    agent_phone_number_id: process.env.AGENT_PHONE_PRESENTACION,
-  },
-  agendamiento: {
-    agent_id: process.env.AGENT_ID_AGENDAMIENTO,
-    agent_phone_number_id: process.env.AGENT_PHONE_AGENDAMIENTO,
-  },
+/**
+ * Lógica genérica para hacer una llamada usando ElevenLabs.
+ */
+const ejecutarLlamada = async (agent_id, agent_phone_number_id, paciente) => {
+  const data = {
+    agent_id,
+    agent_phone_number_id,
+    to_number: `+${paciente}`,
+  };
+
+  const response = await axios.post(
+    "https://api.elevenlabs.io/v1/convai/twilio/outbound-call",
+    data,
+    {
+      headers: {
+        "xi-api-key": process.env.ELEVEN_API_KEY,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  return response.data;
 };
 
-
-// ✅ Llamada de presentación
+/**
+ * 📞 Llamada de presentación
+ */
 export const llamadaPresentacion = async (req, res) => {
   try {
     const { tenant, paciente } = req.body;
-
     if (!tenant || !paciente) {
       return res.status(400).json({ error: "Faltan datos requeridos: tenant o paciente" });
     }
 
-    const agente = agentes.presentacion;
+    // 1️⃣ Obtener configuración del cliente
+    const config = await obtenerConfigCliente(tenant);
 
-    const data = {
-      agent_id: agente.agent_id,
-      agent_phone_number_id: agente.agent_phone_number_id,
-      to_number: `+${paciente}`,
-    };
+    // 2️⃣ Buscar el agente de tipo 'presentacion' y 'llamada'
+    const presentacionConfig = config?.presentacion?.find((c) => c.tipo === "llamada");
+    if (!presentacionConfig) {
+      return res.status(404).json({ error: "No hay configuración de llamada de presentación" });
+    }
 
-    const response = await axios.post(
-      "https://api.elevenlabs.io/v1/convai/twilio/outbound-call",
-      data,
-      {
-        headers: {
-          "xi-api-key": process.env.ELEVEN_API_KEY,
-          "Content-Type": "application/json",
-        },
-      }
+    // 3️⃣ Ejecutar la llamada con los datos obtenidos
+    const metaResponse = await ejecutarLlamada(
+      presentacionConfig.idAgente,
+      presentacionConfig.codigoTelefono,
+      paciente
     );
 
     res.status(200).json({
       message: "📞 Llamada de presentación iniciada correctamente",
       tenant,
       to: `+${paciente}`,
-      metaResponse: response.data,
+      metaResponse,
     });
   } catch (error) {
     console.error("❌ Error en llamada de presentación:", error.response?.data || error.message);
@@ -58,39 +68,37 @@ export const llamadaPresentacion = async (req, res) => {
   }
 };
 
-// ✅ Llamada de agendamiento
+/**
+ * 📞 Llamada de agendamiento
+ */
 export const llamadaAgendamiento = async (req, res) => {
   try {
     const { tenant, paciente } = req.body;
-
     if (!tenant || !paciente) {
       return res.status(400).json({ error: "Faltan datos requeridos: tenant o paciente" });
     }
 
-    const agente = agentes.agendamiento;
+    // 1️⃣ Obtener configuración del cliente
+    const config = await obtenerConfigCliente(tenant);
 
-    const data = {
-      agent_id: agente.agent_id,
-      agent_phone_number_id: agente.agent_phone_number_id,
-      to_number: `+${paciente}`,
-    };
+    // 2️⃣ Buscar el agente de tipo 'agendamiento' y 'llamada'
+    const agendamientoConfig = config?.agendamiento?.find((c) => c.tipo === "llamada");
+    if (!agendamientoConfig) {
+      return res.status(404).json({ error: "No hay configuración de llamada de agendamiento" });
+    }
 
-    const response = await axios.post(
-      "https://api.elevenlabs.io/v1/convai/twilio/outbound-call",
-      data,
-      {
-        headers: {
-          "xi-api-key": process.env.ELEVEN_API_KEY,
-          "Content-Type": "application/json",
-        },
-      }
+    // 3️⃣ Ejecutar la llamada
+    const metaResponse = await ejecutarLlamada(
+      agendamientoConfig.idAgente,
+      agendamientoConfig.codigoTelefono,
+      paciente
     );
 
     res.status(200).json({
       message: "📞 Llamada de agendamiento iniciada correctamente",
       tenant,
       to: `+${paciente}`,
-      metaResponse: response.data,
+      metaResponse,
     });
   } catch (error) {
     console.error("❌ Error en llamada de agendamiento:", error.response?.data || error.message);
@@ -100,4 +108,5 @@ export const llamadaAgendamiento = async (req, res) => {
     });
   }
 };
+
 
