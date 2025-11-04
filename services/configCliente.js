@@ -17,17 +17,17 @@ export const obtenerConfigCliente = async (tenant) => {
       }
     );
 
-    console.log("✅ Respuesta completa del servidor:", response.data);
+    console.log(" Respuesta completa del servidor:", response.data);
 
     if (!response.data?.data) {
-      console.error("⚠️ No se encontró 'data' en la respuesta:", response.data);
+      console.error(" No se encontró 'data' en la respuesta:", response.data);
       throw new Error("No se encontró configuración para el tenant.");
     }
 
     return response.data.data;
   } catch (error) {
     console.error(
-      "❌ Error obteniendo config del cliente:",
+      " Error obteniendo config del cliente:",
       error.response?.data || error.message
     );
     throw new Error("Error al obtener configuración del cliente");

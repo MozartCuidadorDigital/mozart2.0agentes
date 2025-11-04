@@ -6,11 +6,19 @@ dotenv.config();
 /**
  * 🔧 Función genérica para ejecutar llamadas con ElevenLabs
  */
-const ejecutarLlamada = async (agent_id, agent_phone_number_id, numeroDestino) => {
+const ejecutarLlamada = async (
+  agent_id,
+  agent_phone_number_id,
+  numeroDestino,
+  dynamicVariables
+) => {
   const data = {
     agent_id,
     agent_phone_number_id,
     to_number: numeroDestino.startsWith("+") ? numeroDestino : `+${numeroDestino}`,
+    conversation_initiation_client_data: {
+      dynamic_variables: dynamicVariables,
+    },
   };
 
   const response = await axios.post(
@@ -28,7 +36,7 @@ const ejecutarLlamada = async (agent_id, agent_phone_number_id, numeroDestino) =
 };
 
 /**
- * 📞 Enviar llamada de presentación
+ *  Enviar llamada de presentación
  * Requiere: tenant, telefono, cedula
  */
 export const enviarLlamadaPresentacion = async (req, res) => {
@@ -41,11 +49,11 @@ export const enviarLlamadaPresentacion = async (req, res) => {
       });
     }
 
-    // 1️⃣ Obtener la configuración del cliente desde la base de datos
+    // 1️ Obtener configuración del cliente desde la base de datos
     const config = await obtenerConfigCliente(tenant);
     if (!config) throw new Error("No se encontró configuración del cliente");
 
-    // 2️⃣ Buscar la configuración del tipo 'llamada'
+    // 2️ Buscar la configuración del tipo 'llamada'
     const llamadaConfig = config?.agendamiento?.presentacionUrls?.find(
       (c) => c.tipo === "llamada"
     );
@@ -62,20 +70,47 @@ export const enviarLlamadaPresentacion = async (req, res) => {
       throw new Error("Falta ELEVEN_API_KEY en el archivo .env");
     }
 
-    // 3️⃣ Ejecutar la llamada
-    const resultado = await ejecutarLlamada(idAgente, codigoTelefono, telefono);
+    // 3️ Construir variables dinámicas desde la base de datos
+    const dynamicVariables = {
+      nombre_cliente: config.name || "",
+      areas_especializacion: config.areas_especializacion || "",
+      informacion_general: config.informacion_general || "",
+      servicios: config.servicios || "",
+      pagina_web: config.pagina_web || "",
+      phone_whatsapp: config.phone_whatsapp || "",
+      phone_llamadas: config.phone_llamadas || "",
+      presentacion:
+        config.presentacion ||
+        "",
+      firstName: "",
+    };
 
-    // 4️⃣ Responder al cliente
+    console.log(" Enviando llamada con datos:", {
+      idAgente,
+      codigoTelefono,
+      telefono,
+      dynamicVariables,
+    });
+
+    // 4️⃣ Ejecutar la llamada
+    const resultado = await ejecutarLlamada(
+      idAgente,
+      codigoTelefono,
+      telefono,
+      dynamicVariables
+    );
+
+    // 5️⃣ Responder al cliente
     res.status(200).json({
       success: true,
-      message: "📞 Llamada de presentación iniciada correctamente",
+      message: "📲 Llamada de presentación iniciada correctamente",
       tenant,
       telefono,
       cedula,
       resultado,
     });
   } catch (error) {
-    console.error("❌ Error enviando llamada:", error.response?.data || error.message);
+    console.error(" Error enviando llamada:", error.response?.data || error.message);
     res.status(500).json({
       error: "No se pudo iniciar la llamada de presentación",
       details: error.response?.data || error.message,
@@ -84,4 +119,74 @@ export const enviarLlamadaPresentacion = async (req, res) => {
 };
 
 
+/**
+ *  Enviar llamada de agendamiento
+ * Requiere: tenant, telefono, cedula
+ */
+export const enviarLlamadaAgendamiento = async (req, res) => {
+  try {
+    const { tenant, telefono, cedula } = req.body;
 
+    if (!tenant || !telefono || !cedula) {
+      return res.status(400).json({
+        error: "Faltan datos requeridos: tenant, telefono o cedula",
+      });
+    }
+
+    // 1️ Obtener configuración del cliente
+    const config = await obtenerConfigCliente(tenant);
+    if (!config) throw new Error("No se encontró configuración del cliente");
+
+    // 2️ Buscar dentro del bloque agendamiento.agendamientoCitasUrls
+    const llamadaConfig = config?.agendamiento?.agendamientoCitasUrls?.find(
+      (c) => c.tipo === "llamada"
+    );
+
+    if (!llamadaConfig) {
+      return res.status(404).json({
+        error: "No hay configuración de llamada para agendamiento",
+      });
+    }
+
+    const { codigoTelefono, idAgente } = llamadaConfig;
+
+    if (!process.env.ELEVEN_API_KEY) {
+      throw new Error("Falta ELEVEN_API_KEY en el archivo .env");
+    }
+
+    // 3️⃣ Variables dinámicas solo con lo necesario
+    const dynamicVariables = {
+      nombre_cliente: config.nombre_cliente || "",
+      tenant: config.tenant || "",
+    };
+
+    console.log(" Enviando llamada de agendamiento con datos:", {
+      idAgente,
+      codigoTelefono,
+      telefono,
+      dynamicVariables,
+    });
+
+    const resultado = await ejecutarLlamada(
+      idAgente,
+      codigoTelefono,
+      telefono,
+      dynamicVariables
+    );
+
+    res.status(200).json({
+      success: true,
+      message: " Llamada de agendamiento iniciada correctamente",
+      tenant,
+      telefono,
+      cedula,
+      resultado,
+    });
+  } catch (error) {
+    console.error(" Error enviando llamada de agendamiento:", error.response?.data || error.message);
+    res.status(500).json({
+      error: "No se pudo iniciar la llamada de agendamiento",
+      details: error.response?.data || error.message,
+    });
+  }
+};

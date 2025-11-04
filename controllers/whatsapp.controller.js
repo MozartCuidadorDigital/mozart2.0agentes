@@ -83,7 +83,7 @@ export const enviarPresentacion = async (req, res) => {
 
     const metaResponse = await enviarTemplate(urlMeta, tokenMeta, data);
     res.status(200).json({
-      message: "📲 Mensaje de presentación enviado correctamente",
+      message: " Mensaje de presentación enviado correctamente",
       tenant,
       telefono,
       cedula,
@@ -91,7 +91,7 @@ export const enviarPresentacion = async (req, res) => {
     });
   } catch (error) {
     console.error(
-      "❌ Error enviando mensaje de presentación:",
+      " Error enviando mensaje de presentación:",
       error.response?.data || error.message
     );
     res.status(500).json({
@@ -164,7 +164,7 @@ export const enviarVerificacion = async (req, res) => {
 
     const metaResponse = await enviarTemplate(urlMeta, tokenMeta, data);
     res.status(200).json({
-      message: "✅ Mensaje de verificación enviado correctamente",
+      message: " Mensaje de verificación enviado correctamente",
       tenant,
       telefono,
       cedula,
@@ -172,7 +172,7 @@ export const enviarVerificacion = async (req, res) => {
     });
   } catch (error) {
     console.error(
-      "❌ Error enviando verificación:",
+      " Error enviando verificación:",
       error.response?.data || error.message
     );
     res.status(500).json({
@@ -183,7 +183,7 @@ export const enviarVerificacion = async (req, res) => {
 };
 
 /**
- * 🗓️ Enviar mensaje de agendamiento
+ *  Enviar mensaje de agendamiento
  */
 export const enviarAgendamiento = async (req, res) => {
   try {
@@ -245,7 +245,7 @@ export const enviarAgendamiento = async (req, res) => {
 
     const metaResponse = await enviarTemplate(urlMeta, tokenMeta, data);
     res.status(200).json({
-      message: "📅 Mensaje de agendamiento enviado correctamente",
+      message: " Mensaje de agendamiento enviado correctamente",
       tenant,
       telefono,
       cedula,
@@ -253,7 +253,7 @@ export const enviarAgendamiento = async (req, res) => {
     });
   } catch (error) {
     console.error(
-      "❌ Error enviando agendamiento:",
+      " Error enviando agendamiento:",
       error.response?.data || error.message
     );
     res.status(500).json({
