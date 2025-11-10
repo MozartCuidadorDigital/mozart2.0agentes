@@ -1,4 +1,4 @@
-name: Backend - Build & Deploy Agentes
+name: Backend - Build & Push ECR
 
 on:
   push:
@@ -6,8 +6,6 @@ on:
     paths:
       - '**/*.js'
       - '**/*.json'
-      - '**/*.ts'
-      - 'Dockerfile'
       - '.github/workflows/back.yml'
   workflow_dispatch: {}
 
@@ -27,6 +25,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Create .env file in root
+        run: |
+          echo "${{ secrets.ENV_FILE }}" > .env
+          echo "✅ .env generado en la raíz"
+          ls -la
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
