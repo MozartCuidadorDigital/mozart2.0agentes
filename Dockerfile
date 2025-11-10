@@ -28,4 +28,5 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD wget -qO- http://localhost:4000/ping || exit 1
 
 # Comando de arranque
-CMD ["node", "server.js"]
+CMD ["node", "index.js"]
+
