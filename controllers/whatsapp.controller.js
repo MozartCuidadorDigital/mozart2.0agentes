@@ -263,6 +263,119 @@ export const enviarAgendamiento = async (req, res) => {
   }
 };
 
+/**
+ *  Enviar mensaje de recordatorio de cita por WhatsApp
+ */
+export const enviarRecordatorioCita = async (req, res) => {
+  try {
+    const {
+      tenant,
+      telefono,
+      cedula,
+      nombrepaciente,
+      nombredoctor,
+      fecha,
+      hora,
+      lugar,
+      especialidad,
+    } = req.body;
+
+    //  Validar campos requeridos
+    if (
+      !tenant ||
+      !telefono ||
+      !cedula ||
+      !nombrepaciente ||
+      !nombredoctor ||
+      !fecha ||
+      !hora ||
+      !lugar ||
+      !especialidad
+    ) {
+      return res.status(400).json({
+        error:
+          "Faltan datos requeridos: tenant, telefono, cedula, nombrepaciente, nombredoctor, fecha, hora, lugar o especialidad",
+      });
+    }
+
+    // 🔧 Obtener configuración del cliente
+    const config = await obtenerConfigCliente(tenant);
+    if (!config) throw new Error("No se encontró configuración del cliente");
+
+    //  Buscar configuración específica de recordatorios por WhatsApp
+    const recordatorioWpp = config?.agendamiento?.recordatoriosUrls?.find(
+      (c) => c.tipo === "wpp"
+    );
+
+    if (!recordatorioWpp) {
+      return res.status(404).json({
+        error: "No hay configuración de WhatsApp para recordatorio de cita",
+      });
+    }
+
+    const { tokenMeta, urlMeta, nombreTemplate } = recordatorioWpp;
+
+    //  Construir cuerpo del mensaje con los parámetros del template
+    const data = {
+      messaging_product: "whatsapp",
+      to: telefono,
+      type: "template",
+      template: {
+        name: nombreTemplate,
+        language: { code: "en" },
+        components: [
+          {
+            type: "header",
+            parameters: [
+              {
+                type: "image",
+                image: {
+                  link:
+                    config.url_imagen_wpp ||
+                    "https://mozartimages.s3.us-east-1.amazonaws.com/Logo_Mozart_color.png",
+                },
+              },
+            ],
+          },
+          {
+            type: "body",
+            parameters: [
+              { type: "text", text: `${config.name}` }, // IPS/EPS
+              { type: "text", text: nombrepaciente },
+              { type: "text", text: nombredoctor },
+              { type: "text", text: especialidad },
+              { type: "text", text: fecha },
+              { type: "text", text: hora },
+              { type: "text", text: lugar },
+            ],
+          },
+        ],
+      },
+    };
+
+    //  Enviar mensaje a Meta API
+    const metaResponse = await enviarTemplate(urlMeta, tokenMeta, data);
+
+    //  Respuesta OK
+    res.status(200).json({
+      message: "Mensaje de recordatorio de cita enviado correctamente",
+      tenant,
+      telefono,
+      metaResponse,
+    });
+  } catch (error) {
+    console.error(
+      " Error enviando recordatorio de cita:",
+      error.response?.data || error.message
+    );
+    res.status(500).json({
+      error: "No se pudo enviar el mensaje de recordatorio de cita",
+      details: error.response?.data || error.message,
+    });
+  }
+};
+
+
 
 
 
