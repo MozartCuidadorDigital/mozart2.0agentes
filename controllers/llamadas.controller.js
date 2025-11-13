@@ -190,3 +190,112 @@ export const enviarLlamadaAgendamiento = async (req, res) => {
     });
   }
 };
+
+/**
+ * 📞 Enviar llamada de recordatorio de cita
+ * Requiere: tenant, telefono, cedula, nombrepaciente, nombredoctor, fecha, hora, lugar, especialidad
+ */
+export const enviarLlamadaRecordatorioCita = async (req, res) => {
+  try {
+    const {
+      tenant,
+      telefono,
+      cedula,
+      nombrepaciente,
+      nombredoctor,
+      fecha,
+      hora,
+      lugar,
+      especialidad,
+    } = req.body;
+
+    // 🔎 Validación
+    if (
+      !tenant ||
+      !telefono ||
+      !cedula ||
+      !nombrepaciente ||
+      !nombredoctor ||
+      !fecha ||
+      !hora ||
+      !lugar ||
+      !especialidad
+    ) {
+      return res.status(400).json({
+        error:
+          "Faltan datos requeridos: tenant, telefono, cedula, nombrepaciente, nombredoctor, fecha, hora, lugar, especialidad",
+      });
+    }
+
+    // 1️ Obtener configuración del cliente
+    const config = await obtenerConfigCliente(tenant);
+    if (!config) throw new Error("No se encontró configuración del cliente");
+
+    // 2️ Obtener configuración de llamada desde recordatoriosUrls
+    const llamadaConfig = config?.agendamiento?.recordatoriosUrls?.find(
+      (c) => c.tipo === "llamada"
+    );
+
+    if (!llamadaConfig) {
+      return res.status(404).json({
+        error: "No hay configuración de llamada para recordatorio de cita",
+      });
+    }
+
+    const { codigoTelefono, idAgente } = llamadaConfig;
+
+    if (!process.env.ELEVEN_API_KEY) {
+      throw new Error("Falta ELEVEN_API_KEY en el archivo .env");
+    }
+
+    // 3️ Variables dinámicas EXACTAMENTE como ElevenLabs las usa
+    const dynamicVariables = {
+      nombre_cliente: config.name || "",
+      tenant,
+
+      // Datos del paciente
+      nombrepaciente,
+      nombredoctor,
+      fecha,
+      hora,
+      lugar,
+      especialidad,
+
+   
+    };
+
+    console.log(" Enviando llamada RECORDATORIO con datos:", {
+      idAgente,
+      codigoTelefono,
+      telefono,
+      dynamicVariables,
+    });
+
+    // 4️ Ejecutar la llamada
+    const resultado = await ejecutarLlamada(
+      idAgente,
+      codigoTelefono,
+      telefono,
+      dynamicVariables
+    );
+
+    // 5️ Respuesta
+    res.status(200).json({
+      success: true,
+      message: " Llamada de recordatorio iniciada correctamente",
+      tenant,
+      telefono,
+      cedula,
+      resultado,
+    });
+  } catch (error) {
+    console.error(
+      " Error enviando llamada de recordatorio:",
+      error.response?.data || error.message
+    );
+    res.status(500).json({
+      error: "No se pudo iniciar la llamada de recordatorio",
+      details: error.response?.data || error.message,
+    });
+  }
+};
