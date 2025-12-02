@@ -68,13 +68,9 @@ export const enviarPresentacion = async (req, res) => {
             type: "body",
             parameters: [
               { type: "text", text: `*${config.name}*` },
-              { type: "text", text: `Cédula: ${cedula}` },
-              {
-                type: "text",
-                text:
-                  config.presentacion ||
-                  "Soy tu asistente Mozart, estoy aquí para ayudarte con tus citas médicas.",
-              },
+              { type: "text", text: `*${config.areas_especializacion}*` },
+              { type: "text", text: `*${config.servicios}*` },
+             
             ],
           },
         ],
