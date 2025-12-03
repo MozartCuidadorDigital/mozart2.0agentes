@@ -70,7 +70,7 @@ export const enviarPresentacion = async (req, res) => {
               { type: "text", text: `*${config.name}*` },
               { type: "text", text: `*${config.areas_especializacion}*` },
               { type: "text", text: `*${config.servicios}*` },
-             
+            
             ],
           },
         ],
