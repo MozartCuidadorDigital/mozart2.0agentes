@@ -1,7 +1,7 @@
 {
   "name": "mozart2.0agentes",
   "version": "1.0.0",
-   "type": "module",
+  "type": "module",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -20,6 +20,7 @@
   },
   "homepage": "https://github.com/MozartCuidadorDigital/mozart2.0agentes#readme",
   "dependencies": {
+    "@aws-sdk/client-connect": "^3.947.0",
     "axios": "^1.12.2",
     "dotenv": "^17.2.3",
     "express": "^5.1.0"
