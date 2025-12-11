@@ -125,18 +125,19 @@ export const enviarLlamadaPresentacion = async (req, res) => {
  */
 export const enviarLlamadaAgendamiento = async (req, res) => {
   try {
-    const { tenant, telefono, cedula, nombreCompleto, especialidad, citaid } = req.body;
+    const { tenant, telefono, cedula } = req.body;
 
-    if (!tenant || !telefono || !cedula || !nombreCompleto || !especialidad || !citaid) {
+    if (!tenant || !telefono || !cedula) {
       return res.status(400).json({
-        error:
-          "Faltan datos requeridos: tenant, telefono, cedula, nombreCompleto, especialidad, citaid",
+        error: "Faltan datos requeridos: tenant, telefono o cedula",
       });
     }
 
+    // 1️ Obtener configuración del cliente
     const config = await obtenerConfigCliente(tenant);
     if (!config) throw new Error("No se encontró configuración del cliente");
 
+    // 2️ Buscar dentro del bloque agendamiento.agendamientoCitasUrls
     const llamadaConfig = config?.agendamiento?.agendamientoCitasUrls?.find(
       (c) => c.tipo === "llamada"
     );
@@ -153,16 +154,13 @@ export const enviarLlamadaAgendamiento = async (req, res) => {
       throw new Error("Falta ELEVEN_API_KEY en el archivo .env");
     }
 
-    // ⭐ Variables dinámicas específicas
+    // 3️⃣ Variables dinámicas solo con lo necesario
     const dynamicVariables = {
       nombre_cliente: config.nombre_cliente || "",
-      tenant,
-      nombreCompleto,
-      especialidad,
-      citaid,
+      tenant: config.tenant || "",
     };
 
-    console.log("📞 Enviando llamada AGENDAMIENTO:", {
+    console.log(" Enviando llamada de agendamiento con datos:", {
       idAgente,
       codigoTelefono,
       telefono,
@@ -178,24 +176,20 @@ export const enviarLlamadaAgendamiento = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "📲 Llamada de agendamiento iniciada correctamente",
+      message: " Llamada de agendamiento iniciada correctamente",
       tenant,
       telefono,
       cedula,
       resultado,
     });
   } catch (error) {
-    console.error(
-      "❌ Error enviando llamada de agendamiento:",
-      error.response?.data || error.message
-    );
+    console.error(" Error enviando llamada de agendamiento:", error.response?.data || error.message);
     res.status(500).json({
       error: "No se pudo iniciar la llamada de agendamiento",
       details: error.response?.data || error.message,
     });
   }
 };
-
 
 /**
  * 📞 Enviar llamada de recordatorio de cita
