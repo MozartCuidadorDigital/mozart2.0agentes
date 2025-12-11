@@ -68,8 +68,8 @@ export const enviarPresentacion = async (req, res) => {
             type: "body",
             parameters: [
               { type: "text", text: `*${config.name}*` },
-              { type: "text", text: `*${config.areas_especializacion}*` },
-              { type: "text", text: `*${config.servicios}*` },
+              { type: "text", text: `${config.areas_especializacion}` },
+              { type: "text", text: `${config.servicios}` },
             
             ],
           },
@@ -336,7 +336,7 @@ export const enviarRecordatorioCita = async (req, res) => {
           {
             type: "body",
             parameters: [
-              { type: "text", text: `${config.name}` }, // IPS/EPS
+              { type: "text", text: `*${config.name}*` }, // IPS/EPS
               { type: "text", text: nombrepaciente },
               { type: "text", text: nombredoctor },
               { type: "text", text: especialidad },
