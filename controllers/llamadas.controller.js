@@ -22,7 +22,7 @@ const ejecutarLlamada = async (
   };
 
   const response = await axios.post(
-    "https://api.elevenlabs.io/v1/convai/twilio/outbound-call",
+    "https://api.elevenlabs.io/v1/convai/sip-trunk/outbound-call",
     data,
     {
       headers: {
