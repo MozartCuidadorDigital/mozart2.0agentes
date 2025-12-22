@@ -299,3 +299,80 @@ export const enviarLlamadaRecordatorioCita = async (req, res) => {
     });
   }
 };
+
+//Prueba llamada agendamiento
+export const pruebaLlamadaAgendamiento = async (req, res) => {
+  try {
+    const { tenant, telefono, identificadorId, nombreCompleto, especialidad, servicio, citaid } = req.body;
+
+    if (!tenant || !telefono || !identificadorId || !nombreCompleto || !especialidad || !servicio || !citaid) {
+      return res.status(400).json({
+        error:
+          "Faltan datos requeridos: tenant, telefono, cedula, nombreCompleto, especialidad, citaid",
+      });
+    }
+
+    const config = await obtenerConfigCliente(tenant);
+    if (!config) throw new Error("No se encontró configuración del cliente");
+
+    const llamadaConfig = config?.agendamiento?.agendamientoCitasUrls?.find(
+      (c) => c.tipo === "llamada"
+    );
+
+    if (!llamadaConfig) {
+      return res.status(404).json({
+        error: "No hay configuración de llamada para agendamiento",
+      });
+    }
+
+    const { codigoTelefono, idAgente } = llamadaConfig;
+
+    if (!process.env.ELEVEN_API_KEY) {
+      throw new Error("Falta ELEVEN_API_KEY en el archivo .env");
+    }
+
+    // ⭐ Variables dinámicas específicas
+    const dynamicVariables = {
+      nombre_cliente: config.nombre_cliente || 
+      tenant,
+      identificadorId,
+      nombreCompleto,
+      especialidad,
+      servicio,
+      citaid,
+    };
+
+    console.log("📞 Enviando llamada AGENDAMIENTO:", {
+      idAgente,
+      codigoTelefono,
+      telefono,
+      dynamicVariables,
+    });
+
+    const resultado = await ejecutarLlamada(
+      idAgente,
+      codigoTelefono,
+      telefono,
+      dynamicVariables
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "📲 Llamada de agendamiento iniciada correctamente",
+      tenant,
+      telefono,
+      identificadorId,
+      servicio,
+      resultado,
+    });
+  } catch (error) {
+    console.error(
+      "❌ Error enviando llamada de agendamiento:",
+      error.response?.data || error.message
+    );
+    res.status(500).json({
+      error: "No se pudo iniciar la llamada de agendamiento",
+      details: error.response?.data || error.message,
+    });
+  }
+};
