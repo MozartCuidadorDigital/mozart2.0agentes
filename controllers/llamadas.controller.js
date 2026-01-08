@@ -41,9 +41,9 @@ const ejecutarLlamada = async (
  */
 export const enviarLlamadaPresentacion = async (req, res) => {
   try {
-    const { tenant, telefono, cedula } = req.body;
+    const { tenant, telefono, identificadorId, nombreCompleto } = req.body;
 
-    if (!tenant || !telefono || !cedula) {
+    if (!tenant || !telefono || !identificadorId || !nombreCompleto ) {
       return res.status(400).json({
         error: "Faltan datos requeridos: tenant, telefono o cedula",
       });
@@ -72,17 +72,15 @@ export const enviarLlamadaPresentacion = async (req, res) => {
 
     // 3️ Construir variables dinámicas desde la base de datos
     const dynamicVariables = {
-      nombre_cliente: config.name || "",
+      nombre_cliente: config.name ||  
+      tenant,
+      identificadorId,
+      nombreCompleto,
       areas_especializacion: config.areas_especializacion || "",
-      informacion_general: config.informacion_general || "",
+      informacion_general: config.informacion_general || "" ,
       servicios: config.servicios || "",
-      pagina_web: config.pagina_web || "",
-      phone_whatsapp: config.phone_whatsapp || "",
-      phone_llamadas: config.phone_llamadas || "",
-      presentacion:
-        config.presentacion ||
-        "",
-      firstName: "",
+      presentacion: config.presentacion ||"",
+      
     };
 
     console.log(" Enviando llamada con datos:", {
@@ -106,7 +104,8 @@ export const enviarLlamadaPresentacion = async (req, res) => {
       message: "📲 Llamada de presentación iniciada correctamente",
       tenant,
       telefono,
-      cedula,
+      identificadorId,
+      nombreCompleto,
       resultado,
     });
   } catch (error) {
