@@ -178,25 +178,66 @@ export const enviarVerificacion = async (req, res) => {
   }
 };
 
+const obtenerPacientePorCedula = async (cedula, tenant) => {
+  try {
+    console.log("🔎 Consultando paciente en Mozart:", cedula, tenant);
+
+    const resp = await axios.post(
+      "https://new.api.mozartia.com/api/external/patient-info",
+      {
+        tenant,
+        identificacion: cedula,
+      },
+      {
+        headers: {
+          "x-api-key": process.env.MOZART_API_KEY,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const paciente = resp?.data?.data?.paciente;
+
+    if (!paciente) {
+      throw new Error("Paciente no encontrado en Mozart");
+    }
+
+    return paciente;
+  } catch (error) {
+    console.error(
+      "❌ Error real consultando paciente:",
+      error.response?.data || error.message
+    );
+    throw new Error("Error consultando paciente en la API clínica");
+  }
+};
+
+
 /**
  *  Enviar mensaje de agendamiento
  */
 export const enviarAgendamiento = async (req, res) => {
   try {
-    const { tenant, telefono, cedula} = req.body;
+    const { tenant, telefono, cedula } = req.body;
 
-    if (!tenant || !telefono || !cedula ) {
+    if (!tenant || !telefono || !cedula) {
       return res.status(400).json({
-        error: "Faltan datos requeridos: tenant, telefono, cedula",
+        error: "Faltan datos requeridos: tenant, telefono o cedula",
       });
     }
 
+    // 🔎 1. Paciente desde Mozart
+    const paciente = await obtenerPacientePorCedula(cedula, tenant);
+    const nombrePaciente = `${paciente.firstName} ${paciente.lastName}`;
+
+    // 🔧 2. Configuración del cliente
     const config = await obtenerConfigCliente(tenant);
     if (!config) throw new Error("No se encontró configuración del cliente");
 
     const agendamientoWpp = config?.agendamiento?.agendamientoCitasUrls?.find(
       (c) => c.tipo === "wpp"
     );
+
     if (!agendamientoWpp) {
       return res.status(404).json({
         error: "No hay configuración de WhatsApp para agendamiento",
@@ -205,6 +246,7 @@ export const enviarAgendamiento = async (req, res) => {
 
     const { tokenMeta, urlMeta, nombreTemplate } = agendamientoWpp;
 
+    // 📩 3. Payload WhatsApp
     const data = {
       messaging_product: "whatsapp",
       to: telefono,
@@ -229,30 +271,34 @@ export const enviarAgendamiento = async (req, res) => {
           {
             type: "body",
             parameters: [
-              {
-                type: "text",
-                text: `*${config.name}*`,
-              },
+              { type: "text", text: `*${config.name}*` }, // {{1}}
+              { type: "text", text: nombrePaciente },      // {{2}}
             ],
           },
         ],
       },
     };
 
-    const metaResponse = await enviarTemplate(urlMeta, tokenMeta, data);
-    res.status(200).json({
-      message: " Mensaje de agendamiento enviado correctamente",
-      tenant,
-      telefono,
-      cedula,
-      metaResponse,
+    // 🚀 4. Enviar a Meta
+    const metaResponse = await axios.post(urlMeta, data, {
+      headers: {
+        Authorization: `Bearer ${tokenMeta}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    return res.status(200).json({
+      message: "Mensaje de agendamiento enviado correctamente",
+      paciente: nombrePaciente,
+      metaResponse: metaResponse.data,
     });
   } catch (error) {
     console.error(
-      " Error enviando agendamiento:",
+      "❌ Error enviando agendamiento:",
       error.response?.data || error.message
     );
-    res.status(500).json({
+
+    return res.status(500).json({
       error: "No se pudo enviar el mensaje de agendamiento",
       details: error.response?.data || error.message,
     });

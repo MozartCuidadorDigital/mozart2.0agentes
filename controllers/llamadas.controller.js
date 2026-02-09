@@ -45,7 +45,7 @@ export const enviarLlamadaPresentacion = async (req, res) => {
 
     if (!tenant || !telefono || !identificadorId || !nombreCompleto ) {
       return res.status(400).json({
-        error: "Faltan datos requeridos: tenant, telefono o cedula",
+        error: "Faltan datos requeridos: tenant, telefono, identificadorId o nombreCompleto",
       });
     }
 
