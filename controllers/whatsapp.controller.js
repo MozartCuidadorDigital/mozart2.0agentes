@@ -213,6 +213,7 @@ const obtenerPacientePorCedula = async (cedula, tenant) => {
 };
 
 
+
 /**
  *  Enviar mensaje de agendamiento
  */
