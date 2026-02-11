@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import { Hyperbrowser } from "@hyperbrowser/sdk";
 import { chromium } from "playwright-core";
-import moment from 'moment-timezone';
+import moment from "moment-timezone";
 import { leerExcelDesdeBuffer } from "../utils/excel/leerExcel.js";
 import { transformarAutorizaciones } from "../utils/excel/transformarAutorizaciones.js";
 import { generarExcelBuffer } from "../utils/excel/escribirExcel.js";
@@ -122,201 +122,217 @@ export const descargarAutorizacion = async (req, res) => {
 
   try {
     session = await client.sessions.create({ acceptCookies: true });
+
+    res.status(200).json({
+      mensaje: "Proceso iniciado",
+      liveUrl: session.liveUrl,
+    });
+
     console.log("preview: ", session.liveUrl);
 
-    browser = await chromium.connectOverCDP(session.wsEndpoint);
-    const context = browser.contexts()[0];
-    page = context.pages()[0];
+    (async () => {
+      try {
+        browser = await chromium.connectOverCDP(session.wsEndpoint);
+        const context = browser.contexts()[0];
+        page = context.pages()[0];
 
-    await page.goto("https://enlinea.famisanar.com.co/Portal/home.jspx");
+        await page.goto("https://enlinea.famisanar.com.co/Portal/home.jspx");
 
-    // LOGIN
-    await page.locator("#loginForm\\:id").fill(usuario);
-    await page.locator("#loginForm\\:clave").fill(clave);
-    await page.locator("#loginForm\\:loginButton").click();
-    await page.waitForLoadState("networkidle");
+        // LOGIN
+        await page.locator("#loginForm\\:id").fill(usuario);
+        await page.locator("#loginForm\\:clave").fill(clave);
+        await page.locator("#loginForm\\:loginButton").click();
+        await page.waitForLoadState("networkidle");
 
-    // Servicios
-    await page.locator("#j_id101").click();
-    await page.waitForLoadState("networkidle");
+        // Servicios
+        await page.locator("#j_id101").click();
+        await page.waitForLoadState("networkidle");
 
-    // IPS
-    await page.locator("a", { hasText: "IPS" }).click();
-    await page.waitForSelector("#j_id116\\:ips");
+        // IPS
+        await page.locator("a", { hasText: "IPS" }).click();
+        await page.waitForSelector("#j_id116\\:ips");
 
-    // Seleccionar CEMDI
-    await seleccionarPorTexto("#j_id116\\:ips", "CEMDI", page);
-    await page.waitForTimeout(1500);
+        // Seleccionar CEMDI
+        await seleccionarPorTexto("#j_id116\\:ips", "CEMDI", page);
+        await page.waitForTimeout(1500);
 
-    // Seleccionar sede
-    await seleccionarSedeHumana("#j_id116\\:sucIps", sede, page);
-    await page.locator("#j_id116\\:acceptButton").click();
+        // Seleccionar sede
+        await seleccionarSedeHumana("#j_id116\\:sucIps", sede, page);
+        await page.locator("#j_id116\\:acceptButton").click();
 
-    // MENÚ AUTORIZACIONES
-    await page
-      .locator("div.handPointer", { hasText: "Autorizaciones" })
-      .click();
-    await page.waitForTimeout(800);
-    await page.locator("div.handPointer", { hasText: "Reportes" }).click();
-    await page.waitForTimeout(800);
-    await page.locator("a", { hasText: "Autorizaciones por IPS" }).click();
-    await page.waitForLoadState("networkidle");
+        // MENÚ AUTORIZACIONES
+        await page
+          .locator("div.handPointer", { hasText: "Autorizaciones" })
+          .click();
+        await page.waitForTimeout(800);
+        await page.locator("div.handPointer", { hasText: "Reportes" }).click();
+        await page.waitForTimeout(800);
+        await page.locator("a", { hasText: "Autorizaciones por IPS" }).click();
+        await page.waitForLoadState("networkidle");
 
-    // IFRAME
-    await page.waitForSelector("#ifWindows");
-    const frame = await (await page.$("#ifWindows"))?.contentFrame();
-    if (!frame)
-      throw new Error("No se pudo obtener el contenido del iframe ifWindows");
+        // IFRAME
+        await page.waitForSelector("#ifWindows");
+        const frame = await (await page.$("#ifWindows"))?.contentFrame();
+        if (!frame)
+          throw new Error(
+            "No se pudo obtener el contenido del iframe ifWindows",
+          );
 
-    // Inputs de fecha
-    await frame.waitForSelector("#fechainicio:not([disabled])", {
-      state: "visible",
-    });
+        // Inputs de fecha
+        await frame.waitForSelector("#fechainicio:not([disabled])", {
+          state: "visible",
+        });
 
-    // FECHA INICIO
-    await seleccionarFechaVuetify(frame, "#fechainicio", inicio);
+        // FECHA INICIO
+        await seleccionarFechaVuetify(frame, "#fechainicio", inicio);
 
-    // FECHA FIN
-    await frame.waitForSelector("#fechafin:not([disabled])");
-    await seleccionarFechaVuetify(frame, "#fechafin", fin);
+        // FECHA FIN
+        await frame.waitForSelector("#fechafin:not([disabled])");
+        await seleccionarFechaVuetify(frame, "#fechafin", fin);
 
-    // BOTÓN CONSULTAR
-    await frame.waitForTimeout(1000);
-    await frame.locator("button", { hasText: "Consultar" }).click();
+        // BOTÓN CONSULTAR
+        await frame.waitForTimeout(1000);
+        await frame.locator("button", { hasText: "Consultar" }).click();
 
-    // Esperar a que aparezca el botón de descargar
-    const descargarBtn = frame.locator('a:has-text("Descargar")');
-    await descargarBtn.waitFor({ state: "visible", timeout: 30 * 60 * 1000 }); // hasta 30 minutos
+        // Esperar a que aparezca el botón de descargar
+        const descargarBtn = frame.locator('a:has-text("Descargar")');
+        await descargarBtn.waitFor({
+          state: "visible",
+          timeout: 30 * 60 * 1000,
+        }); // hasta 30 minutos
 
-    const href = await descargarBtn.getAttribute("href");
-    if (!href) {
-      throw new Error("No se pudo obtener el href del botón Descargar");
-    }
+        const href = await descargarBtn.getAttribute("href");
+        if (!href) {
+          throw new Error("No se pudo obtener el href del botón Descargar");
+        }
 
-    // URL completa
-    const downloadUrl = `https://enlineawl12.famisanar.com.co:7455${href}`;
+        // URL completa
+        const downloadUrl = `https://enlineawl12.famisanar.com.co:7455${href}`;
 
-    const cookies = await context.cookies();
+        const cookies = await context.cookies();
 
-    const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join("; ");
+        const cookieHeader = cookies
+          .map((c) => `${c.name}=${c.value}`)
+          .join("; ");
 
-    const response = await fetch(downloadUrl, {
-      headers: {
-        Cookie: cookieHeader,
-        Accept:
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      },
-    });
+        const response = await fetch(downloadUrl, {
+          headers: {
+            Cookie: cookieHeader,
+            Accept:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          },
+        });
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(
-        "Error descargando Excel. Respuesta servidor:\n" + text.slice(0, 300),
-      );
-    }
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(
+            "Error descargando Excel. Respuesta servidor:\n" +
+              text.slice(0, 300),
+          );
+        }
 
-    const buffer = await response.arrayBuffer();
+        const buffer = await response.arrayBuffer();
 
-    // 🔹 PROCESAR EN MEMORIA
-    const dataOriginal = leerExcelDesdeBuffer(buffer);
-    const dataTransformada = transformarAutorizaciones(dataOriginal);
-    const bufferTransformado = generarExcelBuffer(dataTransformada);
-    console.log("✅ Excel transformado generado en memoria");
+        // 🔹 PROCESAR EN MEMORIA
+        const dataOriginal = leerExcelDesdeBuffer(buffer);
+        const dataTransformada = transformarAutorizaciones(dataOriginal);
+        const bufferTransformado = generarExcelBuffer(dataTransformada);
+        console.log("✅ Excel transformado generado en memoria");
 
-    /* ======================
+        /* ======================
        LOGIN MOZART
     ====================== */
 
-    contextGlobal = browser.contexts()[0];
-    pageMozartia = await contextGlobal.newPage();
+        contextGlobal = browser.contexts()[0];
+        pageMozartia = await contextGlobal.newPage();
 
-    await pageMozartia.goto(`https://new.app.mozartia.com/${tenant}`, {
-      waitUntil: "networkidle",
-    });
+        await pageMozartia.goto(`https://new.app.mozartia.com/${tenant}`, {
+          waitUntil: "networkidle",
+        });
 
-    await pageMozartia
-      .locator('input[name="email"]')
-      .fill(process.env.mozartEmail);
-    await pageMozartia
-      .locator('input[name="password"]')
-      .fill(process.env.mozartPassword);
-    await pageMozartia
-      .getByRole("button", { name: /Acceder al Sistema/i })
-      .click();
+        await pageMozartia
+          .locator('input[name="email"]')
+          .fill(process.env.mozartEmail);
+        await pageMozartia
+          .locator('input[name="password"]')
+          .fill(process.env.mozartPassword);
+        await pageMozartia
+          .getByRole("button", { name: /Acceder al Sistema/i })
+          .click();
 
-    // Esperar que cargue directamente
-    await pageMozartia.waitForFunction(
-      (tenant) => {
-        return (
-          location.pathname.startsWith(`/${tenant}`) ||
-          location.pathname.startsWith("/medical-authorizations")
+        // Esperar que cargue directamente
+        await pageMozartia.waitForFunction(
+          (tenant) => {
+            return (
+              location.pathname.startsWith(`/${tenant}`) ||
+              location.pathname.startsWith("/medical-authorizations")
+            );
+          },
+          tenant,
+          { timeout: 60000 },
         );
-      },
-      tenant,
-      { timeout: 60000 },
-    );
 
-    await pageMozartia
-      .getByRole("button", { name: /Aceptar/i })
-      .click();
+        await pageMozartia.getByRole("button", { name: /Aceptar/i }).click();
 
-    await pageMozartia.goto(
-      "https://new.app.mozartia.com/cemdiprueba/medical-authorizations",
-      { waitUntil: "networkidle" },
-    );
+        await pageMozartia.goto(
+          "https://new.app.mozartia.com/cemdiprueba/medical-authorizations",
+          { waitUntil: "networkidle" },
+        );
 
-    await pageMozartia
-      .getByRole("button", {
-        name: /Carga Masiva/i,
-      })
-      .waitFor({ state: "visible" });
+        await pageMozartia
+          .getByRole("button", {
+            name: /Carga Masiva/i,
+          })
+          .waitFor({ state: "visible" });
 
-    await pageMozartia
-      .getByRole("button", {
-        name: /Carga Masiva/i,
-      })
-      .click();
+        await pageMozartia
+          .getByRole("button", {
+            name: /Carga Masiva/i,
+          })
+          .click();
 
-    const fileInput = pageMozartia.locator(
-      'input[type="file"][accept*=".xlsx"]',
-    );
+        const fileInput = pageMozartia.locator(
+          'input[type="file"][accept*=".xlsx"]',
+        );
 
-    await fileInput.waitFor({ state: "visible" });
+        await fileInput.waitFor({ state: "visible" });
 
-    // Subir archivo desde buffer
-    await fileInput.setInputFiles({
-      name: "autorizaciones.xlsx",
-      mimeType:
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      buffer: bufferTransformado,
-    });
+        // Subir archivo desde buffer
+        await fileInput.setInputFiles({
+          name: "autorizaciones.xlsx",
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          buffer: bufferTransformado,
+        });
 
-    const cargarBtn = pageMozartia.getByRole("button", {
-      name: /Cargar Archivo/i,
-    });
+        const cargarBtn = pageMozartia.getByRole("button", {
+          name: /Cargar Archivo/i,
+        });
 
-    await pageMozartia
-      .locator('button:not([disabled]):has-text("Cargar Archivo")')
-      .waitFor({ state: "visible", timeout: 15000 });
+        await pageMozartia
+          .locator('button:not([disabled]):has-text("Cargar Archivo")')
+          .waitFor({ state: "visible", timeout: 15000 });
 
-    await cargarBtn.click();
-    console.log("✅ Excel subido a Mozart");
+        await cargarBtn.click();
+        console.log("✅ Excel subido a Mozart");
+      } catch (error) {
+        console.error("Error en proceso asíncrono:", error);
+      } finally {
+        console.log("🔒 Cerrando sesión Hyperbrowser...");
 
-    res.status(200).send("Flujo completado correctamente");
-  } catch (error) {
-    console.error(error);
-    res.status(500).send("Error en el proceso");
-  } finally {
-    console.log("🔒 Cerrando sesión Hyperbrowser...");
+        try {
+          if (browser) {
+            await browser.close();
+          }
+        } catch (e) {
+          console.log("Error cerrando browser:", e.message);
+        }
 
-    try {
-      if (browser) {
-        await browser.close();
+        console.log("✅ Sesión cerrada correctamente");
       }
-    } catch (e) {
-      console.log("Error cerrando browser:", e.message);
-    }
-
-    console.log("✅ Sesión cerrada correctamente");
+    })();
+  } catch (error) {
+    console.error("Error iniciando sesión:", error);
+    res.status(500).send("Error iniciando el proceso");
   }
 };
