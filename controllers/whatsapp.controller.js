@@ -178,6 +178,10 @@ export const enviarVerificacion = async (req, res) => {
   }
 };
 
+/**
+ * obtenerpacienteporcedula
+ */
+
 const obtenerPacientePorCedula = async (cedula, tenant) => {
   try {
     console.log("🔎 Consultando paciente en Mozart:", cedula, tenant);
@@ -196,13 +200,13 @@ const obtenerPacientePorCedula = async (cedula, tenant) => {
       }
     );
 
-    const paciente = resp?.data?.data?.paciente;
+    const data = resp?.data?.data;
 
-    if (!paciente) {
+    if (!data?.paciente) {
       throw new Error("Paciente no encontrado en Mozart");
     }
 
-    return paciente;
+    return data; // 👈 paciente + citas + autorizaciones
   } catch (error) {
     console.error(
       "❌ Error real consultando paciente:",
@@ -211,6 +215,7 @@ const obtenerPacientePorCedula = async (cedula, tenant) => {
     throw new Error("Error consultando paciente en la API clínica");
   }
 };
+
 
 
 
@@ -227,11 +232,32 @@ export const enviarAgendamiento = async (req, res) => {
       });
     }
 
-    // 🔎 1. Paciente desde Mozart
-    const paciente = await obtenerPacientePorCedula(cedula, tenant);
+    // 🔎 1. Obtener data clínica completa
+    const pacienteData = await obtenerPacientePorCedula(cedula, tenant);
+
+    const paciente = pacienteData.paciente;
+    const historial = pacienteData?.citas?.historial || [];
+
     const nombrePaciente = `${paciente.firstName} ${paciente.lastName}`;
 
-    // 🔧 2. Configuración del cliente
+    // 🩺 2. Buscar citas pendientes por agendar
+    const citasPendientes = historial.filter(
+      (cita) => cita.estado === "PendienteAgendar"
+    );
+
+    if (citasPendientes.length === 0) {
+      return res.status(404).json({
+        error: "El paciente no tiene citas pendientes por agendar",
+      });
+    }
+
+    // 👉 Tomamos la primera pendiente
+    const cita = citasPendientes[0];
+
+    const cups = cita?.especialidad || "Consulta médica";
+    const servicio = cita?.servicio || "Servicio médico";
+
+    // 🔧 3. Configuración del cliente
     const config = await obtenerConfigCliente(tenant);
     if (!config) throw new Error("No se encontró configuración del cliente");
 
@@ -247,7 +273,7 @@ export const enviarAgendamiento = async (req, res) => {
 
     const { tokenMeta, urlMeta, nombreTemplate } = agendamientoWpp;
 
-    // 📩 3. Payload WhatsApp
+    // 📩 4. Payload WhatsApp
     const data = {
       messaging_product: "whatsapp",
       to: telefono,
@@ -272,15 +298,17 @@ export const enviarAgendamiento = async (req, res) => {
           {
             type: "body",
             parameters: [
-              { type: "text", text: `*${config.name}*` }, // {{1}}
-              { type: "text", text: nombrePaciente },      // {{2}}
+              { type: "text", text: `*${config.name}*` }, // {{1}} clínica
+              { type: "text", text: nombrePaciente },     // {{2}} paciente
+              { type: "text", text: cups },               // {{3}} cups
+              { type: "text", text: servicio },           // {{4}} servicio
             ],
           },
         ],
       },
     };
 
-    // 🚀 4. Enviar a Meta
+    // 🚀 5. Enviar a Meta
     const metaResponse = await axios.post(urlMeta, data, {
       headers: {
         Authorization: `Bearer ${tokenMeta}`,
@@ -291,6 +319,9 @@ export const enviarAgendamiento = async (req, res) => {
     return res.status(200).json({
       message: "Mensaje de agendamiento enviado correctamente",
       paciente: nombrePaciente,
+      cups,
+      servicio,
+      citasPendientes: citasPendientes.length,
       metaResponse: metaResponse.data,
     });
   } catch (error) {
@@ -305,6 +336,7 @@ export const enviarAgendamiento = async (req, res) => {
     });
   }
 };
+
 
 /**
  *  Enviar mensaje de recordatorio de cita por WhatsApp

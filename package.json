@@ -21,7 +21,7 @@
   "homepage": "https://github.com/MozartCuidadorDigital/mozart2.0agentes#readme",
   "dependencies": {
     "@aws-sdk/client-connect": "^3.947.0",
-    "@hyperbrowser/sdk": "^0.83.0",
+    "@hyperbrowser/sdk": "^0.83.1",
     "axios": "^1.12.2",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
