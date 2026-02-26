@@ -347,7 +347,7 @@ export const enviarLlamadaRecordatorioMedicamento = async (req, res) => {
 
     // 2️ Buscar configuración de llamada para medicamentos
     const llamadaConfig = config?.agendamiento?.recordatoriosUrls?.find(
-      (c) => c.tipo === "medicamento"
+      (c) => c.tipo === "llamada"
     );
 
     if (!llamadaConfig) {
