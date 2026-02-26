@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 /**
- * 🔧 Función genérica para enviar templates a la API de WhatsApp (Meta)
+ *  Función genérica para enviar templates a la API de WhatsApp (Meta)
  */
 const enviarTemplate = async (urlMeta, tokenMeta, data) => {
   const response = await axios.post(urlMeta, data, {
@@ -17,7 +17,7 @@ const enviarTemplate = async (urlMeta, tokenMeta, data) => {
 };
 
 /**
- * 📲 Enviar mensaje de presentación por WhatsApp
+ *  Enviar mensaje de presentación por WhatsApp
  */
 export const enviarPresentacion = async (req, res) => {
   try {
@@ -98,7 +98,7 @@ export const enviarPresentacion = async (req, res) => {
 };
 
 /**
- * 📋 Enviar mensaje de verificación de datos
+ *  Enviar mensaje de verificación de datos
  */
 export const enviarVerificacion = async (req, res) => {
   try {
@@ -184,7 +184,7 @@ export const enviarVerificacion = async (req, res) => {
 
 const obtenerPacientePorCedula = async (cedula, tenant) => {
   try {
-    console.log("🔎 Consultando paciente en Mozart:", cedula, tenant);
+    console.log(" Consultando paciente en Mozart:", cedula, tenant);
 
     const resp = await axios.post(
       "https://new.api.mozartia.com/api/external/patient-info",
@@ -206,10 +206,10 @@ const obtenerPacientePorCedula = async (cedula, tenant) => {
       throw new Error("Paciente no encontrado en Mozart");
     }
 
-    return data; // 👈 paciente + citas + autorizaciones
+    return data; //  paciente + citas + autorizaciones
   } catch (error) {
     console.error(
-      "❌ Error real consultando paciente:",
+      " Error real consultando paciente:",
       error.response?.data || error.message
     );
     throw new Error("Error consultando paciente en la API clínica");
@@ -232,7 +232,7 @@ export const enviarAgendamiento = async (req, res) => {
       });
     }
 
-    // 🔎 1. Paciente desde Mozart
+    //  1. Paciente desde Mozart
     const respPaciente = await axios.post(
       "https://new.api.mozartia.com/api/external/patient-info",
       { tenant, identificacion: cedula },
@@ -251,7 +251,7 @@ export const enviarAgendamiento = async (req, res) => {
 
     const nombrePaciente = `${paciente.firstName} ${paciente.lastName}`;
 
-    // 🔎 2. Buscar la cita EXACTA por ID
+    //  2. Buscar la cita EXACTA por ID
     const historial = dataPaciente?.citas?.historial || [];
 
     const cita = historial.find((c) => c.id === citaId);
@@ -265,7 +265,7 @@ export const enviarAgendamiento = async (req, res) => {
     const cups = cita.especialidad || "Sin CUPS";
     const servicio = cita.servicio || "Servicio médico";
 
-    console.log("📌 CITA SELECCIONADA:", { cups, servicio });
+    console.log(" CITA SELECCIONADA:", { cups, servicio });
 
     // 🔧 3. Configuración del cliente
     const config = await obtenerConfigCliente(tenant);
@@ -317,7 +317,7 @@ export const enviarAgendamiento = async (req, res) => {
       },
     };
 
-    // 🚀 5. Enviar a Meta
+    //  5. Enviar a Meta
     const metaResponse = await axios.post(urlMeta, data, {
       headers: {
         Authorization: `Bearer ${tokenMeta}`,
@@ -334,7 +334,7 @@ export const enviarAgendamiento = async (req, res) => {
     });
   } catch (error) {
     console.error(
-      "❌ Error enviando agendamiento:",
+      " Error enviando agendamiento:",
       error.response?.data || error.message
     );
 
@@ -380,7 +380,7 @@ export const enviarRecordatorioCita = async (req, res) => {
       });
     }
 
-    // 🔧 Obtener configuración del cliente
+    //  Obtener configuración del cliente
     const config = await obtenerConfigCliente(tenant);
     if (!config) throw new Error("No se encontró configuración del cliente");
 

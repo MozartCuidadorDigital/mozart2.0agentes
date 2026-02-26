@@ -299,6 +299,125 @@ export const enviarLlamadaRecordatorioCita = async (req, res) => {
   }
 };
 
+//llamada recordatorio medicamentos
+export const enviarLlamadaRecordatorioMedicamento = async (req, res) => {
+  try {
+    const {
+      tenant,
+      telefono,
+      cedula,
+      nombrepaciente,
+      nombre_cliente,
+      medicamento,
+      dosis,
+      frecuencia,
+      via_administracion,
+      fecha_inicio,
+      fecha_fin,
+      hora_programada,
+      duracion,
+      indicaciones_especiales,
+    } = req.body;
+
+    // 🔎 Validación
+    if (
+      !tenant ||
+      !telefono ||
+      !cedula ||
+      !nombrepaciente ||
+      !nombre_cliente ||
+      !medicamento ||
+      !dosis ||
+      !frecuencia ||
+      !via_administracion ||
+      !fecha_inicio ||
+      !fecha_fin ||
+      !hora_programada ||
+      !duracion
+    ) {
+      return res.status(400).json({
+        error:
+          "Faltan datos requeridos: tenant, telefono, cedula, nombrepaciente, nombre_cliente, medicamento, dosis, frecuencia, via_administracion, fecha_inicio, fecha_fin, hora_programada, duracion",
+      });
+    }
+
+    // 1️ Obtener configuración del cliente
+    const config = await obtenerConfigCliente(tenant);
+    if (!config) throw new Error("No se encontró configuración del cliente");
+
+    // 2️ Buscar configuración de llamada para medicamentos
+    const llamadaConfig = config?.agendamiento?.recordatoriosUrls?.find(
+      (c) => c.tipo === "medicamento"
+    );
+
+    if (!llamadaConfig) {
+      return res.status(404).json({
+        error: "No hay configuración de llamada para recordatorio de medicamento",
+      });
+    }
+
+    const { codigoTelefono, idAgente } = llamadaConfig;
+
+    if (!process.env.ELEVEN_API_KEY) {
+      throw new Error("Falta ELEVEN_API_KEY en el archivo .env");
+    }
+
+    // 3️ Variables dinámicas EXACTAMENTE como ElevenLabs las usa
+    const dynamicVariables = {
+      tenant,
+      telefono,
+      cedula,
+      nombrepaciente,
+      nombre_cliente,
+
+      medicamento,
+      dosis,
+      frecuencia,
+      via_administracion,
+      fecha_inicio,
+      fecha_fin,
+      hora_programada,
+      duracion,
+      indicaciones_especiales: indicaciones_especiales || "",
+    };
+
+    console.log(" Enviando llamada RECORDATORIO MEDICAMENTO con datos:", {
+      idAgente,
+      codigoTelefono,
+      telefono,
+      dynamicVariables,
+    });
+
+    // 4️ Ejecutar la llamada
+    const resultado = await ejecutarLlamada(
+      idAgente,
+      codigoTelefono,
+      telefono,
+      dynamicVariables
+    );
+
+    // 5️ Respuesta
+    res.status(200).json({
+      success: true,
+      message: " Llamada de recordatorio de medicamento iniciada correctamente",
+      tenant,
+      telefono,
+      cedula,
+      resultado,
+    });
+  } catch (error) {
+    console.error(
+      " Error enviando llamada de recordatorio de medicamento:",
+      error.response?.data || error.message
+    );
+
+    res.status(500).json({
+      error: "No se pudo iniciar la llamada de recordatorio de medicamento",
+      details: error.response?.data || error.message,
+    });
+  }
+};
+
 //Prueba llamada agendamiento
 export const pruebaLlamadaAgendamiento = async (req, res) => {
   try {
