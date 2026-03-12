@@ -456,6 +456,137 @@ export const enviarRecordatorioCita = async (req, res) => {
     });
   }
 };
+/**
+ * Enviar citas pendientes (máximo 5) por WhatsApp
+ */
+export const enviarCitasPendientes = async (req, res) => {
+  try {
+    const { tenant, telefono, cedula } = req.body;
+
+    if (!tenant || !telefono || !cedula) {
+      return res.status(400).json({
+        error: "Faltan datos requeridos: tenant, telefono, cedula",
+      });
+    }
+
+    const WHATSAPP_META_TOKEN = process.env.WHATSAPP_META_TOKEN;
+    const WHATSAPP_META_URL = process.env.WHATSAPP_META_URL;
+
+    // 1️⃣ Consultar paciente en Mozart
+    const respPaciente = await axios.post(
+      "https://new.api.mozartia.com/api/external/patient-info",
+      {
+        tenant,
+        identificacion: cedula,
+      },
+      {
+        headers: {
+          "x-api-key": process.env.MOZART_API_KEY,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const dataPaciente = respPaciente?.data?.data;
+    const paciente = dataPaciente?.paciente;
+
+    if (!paciente) throw new Error("Paciente no encontrado");
+
+    const nombrePaciente = `${paciente.firstName} ${paciente.lastName}`.trim();
+
+    const historial = dataPaciente?.citas?.historial || [];
+
+    // 2️⃣ Filtrar citas pendientes
+    const citasPendientes = historial
+      .filter((c) => c.estado === "PendienteAgendar")
+      .slice(0, 5);
+
+    if (citasPendientes.length === 0) {
+      return res.status(200).json({
+        message: "El paciente no tiene citas pendientes",
+      });
+    }
+
+    // 3️⃣ Obtener especialidades numeradas
+    const especialidades = citasPendientes.map(
+      (c, i) => `${i + 1}. ${c.especialidad || "Consulta médica"}`
+    );
+
+    // completar hasta 5 para el template
+    while (especialidades.length < 5) {
+      especialidades.push(" ");
+    }
+
+    console.log("CITAS PENDIENTES:", especialidades);
+
+    // 4️⃣ Payload WhatsApp
+    const data = {
+      messaging_product: "whatsapp",
+      to: telefono,
+      type: "template",
+      template: {
+        name: "roche_plan_de_manejo",
+        language: {
+          code: "en",
+        },
+        components: [
+          {
+            type: "header",
+            parameters: [
+              {
+                type: "image",
+                image: {
+                  link: "https://mozartimages-1.s3.us-east-1.amazonaws.com/Logo_Roche.PNG",
+                },
+              },
+            ],
+          },
+          {
+            type: "body",
+            parameters: [
+              { type: "text", text: ` ${nombrePaciente} ` },
+              { type: "text", text: especialidades[0] },
+              { type: "text", text: especialidades[1] },
+              { type: "text", text: especialidades[2] },
+              { type: "text", text: especialidades[3] },
+              { type: "text", text: especialidades[4] },
+            ],
+          },
+        ],
+      },
+    };
+
+    // 5️⃣ Enviar a WhatsApp (Meta)
+    const metaResponse = await axios.post(
+      WHATSAPP_META_URL,
+      data,
+      {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_META_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    return res.status(200).json({
+      message: "Mensaje de citas pendientes enviado correctamente",
+      paciente: nombrePaciente,
+      especialidades,
+      metaResponse: metaResponse.data,
+    });
+
+  } catch (error) {
+    console.error(
+      "Error enviando citas pendientes:",
+      error.response?.data || error.message
+    );
+
+    return res.status(500).json({
+      error: "No se pudo enviar el mensaje de citas pendientes",
+      details: error.response?.data || error.message,
+    });
+  }
+};
 
 
 

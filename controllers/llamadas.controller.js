@@ -4,7 +4,7 @@ import { obtenerConfigCliente } from "../services/configCliente.js";
 dotenv.config();
 
 /**
- * 🔧 Función genérica para ejecutar llamadas con ElevenLabs
+ *  Función genérica para ejecutar llamadas con ElevenLabs
  */
 const ejecutarLlamada = async (
   agent_id,
