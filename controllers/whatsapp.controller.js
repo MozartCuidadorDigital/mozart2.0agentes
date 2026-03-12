@@ -575,6 +575,7 @@ export const enviarCitasPendientes = async (req, res) => {
       metaResponse: metaResponse.data,
     });
 
+    
   } catch (error) {
     console.error(
       "Error enviando citas pendientes:",
@@ -586,7 +587,7 @@ export const enviarCitasPendientes = async (req, res) => {
       details: error.response?.data || error.message,
     });
   }
-};
+}; 
 
 
 
