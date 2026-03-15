@@ -2,7 +2,7 @@ name: Backend - Agentes Mozart2
 
 on:
   push:
-    branches: ["master"]
+    branches: ["main"]
 
 jobs:
   deploy:
