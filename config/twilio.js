@@ -116,7 +116,7 @@ export const enviarCorreoInteresComercial = async (dataInteres) => {
     .replace(/{{datos}}/g, datosHtml)
 
   const msg = {
-    to: "brian.riofrio@mozartai.com.co",
+    to: "comercial@mozartai.com.co",
     from: "info@mozartai.com.co",
     subject: titulo,
     html: template
