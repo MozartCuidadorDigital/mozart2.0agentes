@@ -80,6 +80,7 @@ export const enviarCorreoInteresComercial = async (dataInteres) => {
   const {
     nombre,
     interes,
+    telefono,
     franjaHoraria,
     correo,
     empresa,
@@ -96,6 +97,7 @@ export const enviarCorreoInteresComercial = async (dataInteres) => {
     <p><strong>Nombre:</strong> ${nombre}</p>
     <p><strong>Empresa:</strong> ${empresa}</p>
     <p><strong>Cargo:</strong> ${cargo}</p>
+    <p><strong>Teléfono:</strong> ${telefono}</p>
     <p><strong>Correo:</strong> ${correo}</p>
     <p><strong>Interés:</strong> ${interes}</p>
   `;
