@@ -70,6 +70,61 @@ export const envioSolicitudCita = async (email, dataPaciente) => {
 };
 
 
+// ENVIO CORREO INTERES COMERCIAL
+
+export const enviarCorreoInteresComercial = async (dataInteres) => {
+
+  const templatePath = path.join(__dirname, '../templates/correoInteresComercial.html');
+  let template = await fs.promises.readFile(templatePath, 'utf8');
+
+  const {
+    nombre,
+    interes,
+    franjaHoraria,
+    correo,
+    empresa,
+    cargo
+  } = dataInteres;
+
+  let franjaTexto = "";
+
+  if (franjaHoraria === "mañana") franjaTexto = "En la mañana";
+  if (franjaHoraria === "tarde") franjaTexto = "En la tarde";
+  if (franjaHoraria === "noche") franjaTexto = "En la noche";
+
+  let datosHtml = `
+    <p><strong>Nombre:</strong> ${nombre}</p>
+    <p><strong>Empresa:</strong> ${empresa}</p>
+    <p><strong>Cargo:</strong> ${cargo}</p>
+    <p><strong>Correo:</strong> ${correo}</p>
+    <p><strong>Interés:</strong> ${interes}</p>
+  `;
+
+  if (franjaTexto) datosHtml += `<p><strong>Franja horaria de contacto:</strong> ${franjaTexto}</p>`;
+
+  const titulo = "Nuevo interés comercial";
+
+  const mensajePrincipal = `
+    Se ha recibido una nueva solicitud de contacto comercial.
+    A continuación se encuentran los datos de la persona interesada:
+  `;
+
+
+  template = template
+    .replace(/{{titulo}}/g, titulo)
+    .replace(/{{mensajePrincipal}}/g, mensajePrincipal)
+    .replace(/{{datos}}/g, datosHtml)
+
+  const msg = {
+    to: "brian.riofrio@mozartai.com.co",
+    from: "info@mozartai.com.co",
+    subject: titulo,
+    html: template
+  };
+
+  await sgMail.send(msg);
+};
+
 
 
 // ENVIO FAMISANAR CORREO CITA AGENDADA
