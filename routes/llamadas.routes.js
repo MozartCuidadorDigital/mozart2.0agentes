@@ -1,6 +1,6 @@
 import express from "express";
 import { enviarLlamadaPresentacion, enviarLlamadaAgendamiento, enviarLlamadaRecordatorioCita,
-      pruebaLlamadaAgendamiento, enviarLlamadaRecordatorioMedicamento,
+      pruebaLlamadaAgendamiento, enviarLlamadaRecordatorioMedicamento, enviarLlamadaTamizaje,
       
 } from "../controllers/llamadas.controller.js";
 
@@ -11,7 +11,7 @@ router.post("/agendamiento", enviarLlamadaAgendamiento);
 router.post("/recordatoriocita", enviarLlamadaRecordatorioCita);
 router.post("/Pruebagendamiento", pruebaLlamadaAgendamiento);
 router.post("/recordatoriomedicamento", enviarLlamadaRecordatorioMedicamento);
-
+router.post("/Tamizaje", enviarLlamadaTamizaje );
 
 export default router;
 
