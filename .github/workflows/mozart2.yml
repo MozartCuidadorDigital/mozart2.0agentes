@@ -1,4 +1,4 @@
-name: Backend - InstitutoFracturas
+name: Backend - Agentes Mozart2
 
 on:
   push:
@@ -15,18 +15,18 @@ jobs:
       - name: Copiar archivos al servidor
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ secrets.EC2_HOST_2 }}
           username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
+          key: ${{ secrets.EC2_SSH_KEY_2 }}
           source: "."
           target: "/home/ubuntu/mozart2.0agentes"
 
       - name: Ejecutar comandos en EC2
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ secrets.EC2_HOST_2 }}
           username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
+          key: ${{ secrets.EC2_SSH_KEY_2 }}
           script: |
             cd /home/ubuntu/mozart2.0agentes
 
@@ -34,9 +34,9 @@ jobs:
             npm install --production
 
             echo "Reiniciando backend..."
-            pm2 delete backend-agentes-intitutofracturas
+            pm2 delete backend-agentes
             
-            pm2 start index.js --name backend-agentes-intitutofracturas
+            pm2 start index.js --name backend-agentes
 
             pm2 save
 

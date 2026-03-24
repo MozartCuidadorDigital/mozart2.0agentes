@@ -1,11 +1,11 @@
 import dotenv from "dotenv";
 import { Hyperbrowser } from "@hyperbrowser/sdk";
 import { chromium } from "playwright-core";
+import { leerExcelDesdeBuffer } from "../../../utils/excel/leerExcel.js";
+import { transformarAutorizaciones } from "../../../utils/excel/transformarAutorizaciones.js";
+import { generarExcelBuffer } from "../../../utils/excel/escribirExcel.js";
+import { enviarCorreoCita } from '../../../config/twilio.js';
 import moment from "moment-timezone";
-import { leerExcelDesdeBuffer } from "../utils/excel/leerExcel.js";
-import { transformarAutorizaciones } from "../utils/excel/transformarAutorizaciones.js";
-import { generarExcelBuffer } from "../utils/excel/escribirExcel.js";
-import fetch from "node-fetch";
 
 dotenv.config();
 
@@ -16,6 +16,7 @@ let pageMozartia;
 const client = new Hyperbrowser({
   apiKey: process.env.HYPERBROWSER_API_KEY,
 });
+
 
 async function seleccionarPorTexto(selector, texto, page) {
   const value = await page.$eval(
@@ -38,7 +39,7 @@ async function seleccionarPorTexto(selector, texto, page) {
 
 async function seleccionarSedeHumana(selector, sede, page) {
   const mapa = {
-    centro: "manejo de la diabetes s.a.s - cemdi sas",
+    principal: "manejo de la diabetes s.a.s - cemdi sas",
     suba: "sede suba",
     sur: "sede sur",
   };
@@ -96,9 +97,14 @@ async function seleccionarFechaVuetify(frame, inputSelector, fecha) {
     .click({ force: true });
 }
 
+// AUTORIZACIONES FAMISANAR
+
 export const descargarAutorizacion = async (req, res) => {
-  const { usuario, clave, sede, fechaInicio, fechaFin, tenant } = req.body;
+  const { sede, fechaInicio, fechaFin, tenant } = req.body;
   let inicio, fin;
+
+  const usuario = process.env.USUARIOCEMDI
+  const clave = process.env.CLAVECEMDI
 
   if (fechaInicio && fechaFin) {
     inicio = parseFecha(fechaInicio);
@@ -140,7 +146,9 @@ export const descargarAutorizacion = async (req, res) => {
 
         // LOGIN
         await page.locator("#loginForm\\:id").fill(usuario);
+        await page.waitForTimeout(500);
         await page.locator("#loginForm\\:clave").fill(clave);
+        await page.waitForTimeout(500);
         await page.locator("#loginForm\\:loginButton").click();
         await page.waitForLoadState("networkidle");
 
@@ -201,40 +209,29 @@ export const descargarAutorizacion = async (req, res) => {
           timeout: 30 * 60 * 1000,
         }); // hasta 30 minutos
 
-        const href = await descargarBtn.getAttribute("href");
-        if (!href) {
-          throw new Error("No se pudo obtener el href del botón Descargar");
-        }
+        // ===== Descarga vía fetch dentro del navegador =====
+        const finalBuffer = await frame.evaluate(
+          async (btn) => {
+            const url = btn.href; // href directo del enlace
 
-        // URL completa
-        const downloadUrl = `https://enlineawl12.famisanar.com.co:7455${href}`;
-
-        const cookies = await context.cookies();
-
-        const cookieHeader = cookies
-          .map((c) => `${c.name}=${c.value}`)
-          .join("; ");
-
-        const response = await fetch(downloadUrl, {
-          headers: {
-            Cookie: cookieHeader,
-            Accept:
-              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            const res = await fetch(url);
+            if (!res.ok) {
+              throw new Error(
+                "Error descargando Excel desde iframe, status: " + res.status,
+              );
+            }
+            const arrayBuffer = await res.arrayBuffer();
+            return Array.from(new Uint8Array(arrayBuffer)); // se devuelve como array simple
           },
-        });
+          await descargarBtn.elementHandle(),
+        );
 
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(
-            "Error descargando Excel. Respuesta servidor:\n" +
-              text.slice(0, 300),
-          );
-        }
+        // Convertir a Buffer de Node
+        const bufferNode = Buffer.from(finalBuffer);
+        console.log("✅ Excel descargado correctamente desde iframe");
 
-        const buffer = await response.arrayBuffer();
-
-        // 🔹 PROCESAR EN MEMORIA
-        const dataOriginal = leerExcelDesdeBuffer(buffer);
+        // ===== Procesar Excel =====
+        const dataOriginal = leerExcelDesdeBuffer(bufferNode);
         const dataTransformada = transformarAutorizaciones(dataOriginal);
         const bufferTransformado = generarExcelBuffer(dataTransformada);
         console.log("✅ Excel transformado generado en memoria");
@@ -275,7 +272,7 @@ export const descargarAutorizacion = async (req, res) => {
         await pageMozartia.getByRole("button", { name: /Aceptar/i }).click();
 
         await pageMozartia.goto(
-          "https://new.app.mozartia.com/cemdiprueba/medical-authorizations",
+          `https://new.app.mozartia.com/${tenant}/medical-authorizations`,
           { waitUntil: "networkidle" },
         );
 
@@ -334,5 +331,47 @@ export const descargarAutorizacion = async (req, res) => {
   } catch (error) {
     console.error("Error iniciando sesión:", error);
     res.status(500).send("Error iniciando el proceso");
+  }
+};
+
+
+
+//CORREOS
+
+export const enviarCorreoCitaEndpoint = async (req, res) => {
+  try {
+
+    const {
+      nombrePaciente, doctor, fecha, hora, servicio, ipsAtencion, email, estado, razon } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        error: "Email requerido"
+      });
+    }
+
+    const dataPaciente = {
+      nombrePaciente,
+      doctor,
+      fecha,
+      hora,
+      servicio,
+      ipsAtencion
+    };
+
+    await enviarCorreoCita(email, dataPaciente, estado, razon);
+
+    res.json({
+      message: "Correo enviado correctamente"
+    });
+
+  } catch (error) {
+
+    console.error("Error enviando correo:", error);
+
+    res.status(500).json({
+      error: "Error enviando correo"
+    });
+
   }
 };

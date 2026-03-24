@@ -495,6 +495,9 @@ export const pruebaLlamadaAgendamiento = async (req, res) => {
   }
 };
 
+
+
+
 /**
  *  Enviar llamada de tamizaje
  * Requiere: tenant, telefono, preguntas dinámicas
@@ -566,7 +569,7 @@ export const enviarLlamadaTamizaje = async (req, res) => {
     // 5️ Respuesta
     res.status(200).json({
       success: true,
-      message: "📲 Llamada de tamizaje iniciada correctamente",
+      message: " Llamada de tamizaje iniciada correctamente",
       tenant,
       telefono,
       resultado,
@@ -583,3 +586,50 @@ export const enviarLlamadaTamizaje = async (req, res) => {
     });
   }
 };
+
+/**
+ *  Enviar llamada centro diesel
+ * Requiere: telefono, nombre, cedula, interes
+ */
+
+export const enviarLlamadaCentroDiesel = async (req, res) => {
+  try{
+    const { telefono, nombre, cedula, interes } = req.body
+
+    if (!nombre || !telefono || !cedula || !interes) {
+      return res.status(400).json({
+        error:
+          "Faltan datos requeridos: nombre, telefono, cedula, interes",
+      });
+    }
+
+    const dynamicVariables = {
+      nombre,
+      cedula,
+      interes
+    };
+
+    const resultado = await ejecutarLlamada(
+      process.env.IDAGENTECENTRODIESEL,
+      process.env.IDTELEFONOCENTRODIESEL,
+      telefono,
+      dynamicVariables
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "📲 Llamada de centro diesel iniciada correctamente",
+      telefono,
+      resultado,
+    });
+  } catch (error) {
+    console.error(
+      "❌ Error enviando llamada de centro diesel:",
+      error.response?.data || error.message
+    );
+    res.status(500).json({
+      error: "No se pudo iniciar la llamada de centro diesel",
+      details: error.response?.data || error.message,
+    });
+  }
+}
