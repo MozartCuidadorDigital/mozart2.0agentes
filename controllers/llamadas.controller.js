@@ -509,14 +509,15 @@ export const enviarLlamadaTamizaje = async (req, res) => {
       telefono,
       nombre,
       patientId,
+      tamizajeId,
       objetivo,
       ...preguntas //  captura pregunta1, pregunta2, etc dinámicamente
     } = req.body;
 
     //  Validación básica
-    if (!tenant || !telefono || !nombre || !patientId || !objetivo) {
+    if (!tenant || !telefono || !nombre || !patientId || !tamizajeId || !objetivo) {
       return res.status(400).json({
-        error: "Faltan datos requeridos: tenant, telefono, nombre, patientId, objetivo",
+        error: "Faltan datos requeridos: tenant, telefono, nombre, patientId, tamizajeId, objetivo",
       });
     }
 
@@ -547,6 +548,7 @@ export const enviarLlamadaTamizaje = async (req, res) => {
       tenant,
       nombre,
       patientId,
+      tamizajeId,
       objetivo,
 
       //  aquí metes TODAS las preguntas dinámicamente
