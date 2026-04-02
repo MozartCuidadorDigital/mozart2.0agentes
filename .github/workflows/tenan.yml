@@ -1,0 +1,66 @@
+name: Deploy Agentes — Mozart2
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  get-tenants:
+    runs-on: ubuntu-latest
+    outputs:
+      tenants: ${{ steps.list.outputs.tenants }}
+
+    steps:
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.MOZART_AWS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.MOZART_AWS_SECRET }}
+          aws-region: us-east-1
+
+      - id: list
+        run: |
+          TENANTS=$(aws ssm get-parameter \
+          --name "/mozart2/tenants/_list" \
+          --query "Parameter.Value" --output text)
+
+          echo "tenants=$(echo $TENANTS | tr ',' '\n' | jq -R . | jq -sc .)" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: get-tenants
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        tenant: ${{ fromJson(needs.get-tenants.outputs.tenants) }}
+
+    steps:
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.MOZART_AWS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.MOZART_AWS_SECRET }}
+          aws-region: us-east-1
+
+      - name: Deploy ${{ matrix.tenant }}
+        run: |
+          ACCOUNT_ID=$(aws ssm get-parameter \
+          --name "/mozart2/tenants/${{ matrix.tenant }}/account_id" \
+          --query "Parameter.Value" --output text)
+
+          INSTANCE_ID=$(aws ssm get-parameter \
+          --name "/mozart2/tenants/${{ matrix.tenant }}/ec2_instance_id_worker" \
+          --query "Parameter.Value" --output text)
+
+          CREDS=$(aws sts assume-role \
+          --role-arn "arn:aws:iam::$ACCOUNT_ID:role/Mozart-CrossAccount" \
+          --role-session-name "deploy-worker-${{ matrix.tenant }}")
+
+          export AWS_ACCESS_KEY_ID=$(echo $CREDS | jq -r '.Credentials.AccessKeyId')
+          export AWS_SECRET_ACCESS_KEY=$(echo $CREDS | jq -r '.Credentials.SecretAccessKey')
+          export AWS_SESSION_TOKEN=$(echo $CREDS | jq -r '.Credentials.SessionToken')
+
+          aws ssm send-command \
+          --instance-ids "$INSTANCE_ID" \
+          --document-name "AWS-RunShellScript" \
+          --parameters '{"commands":["bash /home/ubuntu/mozart2.0agentes/deploy.sh"]}'
