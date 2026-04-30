@@ -359,8 +359,7 @@ export const enviarRecordatorioCita = async (req, res) => {
       fecha,
       hora,
       lugar,
-      especialidad,
-      autorizacion,
+      especialidad
     } = req.body;
 
     //  Validar campos requeridos
@@ -373,13 +372,12 @@ export const enviarRecordatorioCita = async (req, res) => {
       !fecha ||
       !hora ||
       !lugar ||
-      !especialidad ||
-      !autorizacion
+      !especialidad 
 
     ) {
       return res.status(400).json({
         error:
-          "Faltan datos requeridos: tenant, telefono, cedula, nombrepaciente, nombredoctor, fecha, hora, lugar, especialidad, o autorizacion",
+          "Faltan datos requeridos: tenant, telefono, cedula, nombrepaciente, nombredoctor, fecha, hora, lugar o especialidad",
       });
     }
 
@@ -432,7 +430,6 @@ export const enviarRecordatorioCita = async (req, res) => {
               { type: "text", text: fecha },
               { type: "text", text: hora },
               { type: "text", text: lugar },
-              { type: "text", text: autorizacion },
             ],
           },
         ],
