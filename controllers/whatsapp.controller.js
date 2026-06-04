@@ -187,7 +187,7 @@ const obtenerPacientePorCedula = async (cedula, tenant) => {
     console.log(" Consultando paciente en Mozart:", cedula, tenant);
 
     const resp = await axios.post(
-      "https://new.api.mozartia.com/api/external/patient-info",
+      "https://api.salud.mozartai.com.co/api/external/patient-info",
       {
         tenant,
         identificacion: cedula,
@@ -234,7 +234,7 @@ export const enviarAgendamiento = async (req, res) => {
 
     //  1. Paciente desde Mozart
     const respPaciente = await axios.post(
-      "https://new.api.mozartia.com/api/external/patient-info",
+      "https://api.salud.mozartai.com.co/api/external/patient-info",
       { tenant, identificacion: cedula },
       {
         headers: {
@@ -475,7 +475,7 @@ export const enviarCitasPendientes = async (req, res) => {
 
     // 1️⃣ Consultar paciente en Mozart
     const respPaciente = await axios.post(
-      "https://new.api.mozartia.com/api/external/patient-info",
+      "https://api.salud.mozartai.com.co/api/external/patient-info",
       {
         tenant,
         identificacion: cedula,

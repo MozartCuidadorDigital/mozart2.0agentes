@@ -7,7 +7,7 @@ export const obtenerConfigCliente = async (tenant) => {
     console.log("🔍 Consultando configuración de tenant:", tenant);
 
     const response = await axios.post(
-      "https://new.api.mozartia.com/api/external/client-config",
+      "https://api.salud.mozartai.com.co/api/external/client-config",
       { tenant },
       {
         headers: {
