@@ -2,7 +2,7 @@ import express from "express";
 import { descargarAutorizacion, enviarCorreoCitaEndpoint } from "../controllers/automatizaciones/famisanar/automatizacion.js";
 import { enviarCorreoComercial } from "../controllers/automatizaciones/comercial/automatizacion.js";
 import { enviarTemplateWP } from "../controllers/automatizaciones/coosalud/automatizacion.js";
-import { AgendarCitaGuajiraCristal, CancelarCitaGuajiraCristal, descargarAutorizacionEsperanza, ReAgendarCitaGuajiraCristal } from "../controllers/automatizaciones/guajira/automatizacion.js";
+import { AgendarCitaGuajiraCristal, AutorizacionGuajira, CancelarCitaGuajiraCristal, descargarAutorizacionEsperanza, ReAgendarCitaGuajiraCristal } from "../controllers/automatizaciones/guajira/automatizacion.js";
 import multer from "multer";
 
 const storage = multer.memoryStorage();
@@ -18,6 +18,7 @@ router.post("/enviarCorreoComercial", enviarCorreoComercial);
 router.post("/enviarTemplate", enviarTemplateWP)
 
 
+router.post("/autorizacionPersona", AutorizacionGuajira)
 router.post(
   "/subirAutorizacion",
   upload.array("excel", 10),

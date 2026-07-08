@@ -9,6 +9,8 @@ import { leerExcelDesdeBuffer } from "../../../utils/excel/leerExcel.js";
 
 dotenv.config();
 
+const MOZART_BASE_URL = "https://api.salud.mozartai.com.co";
+
 let browser, page, session; 
 let contextGlobal;
 let pageMozartia;
@@ -19,12 +21,28 @@ const client = new Hyperbrowser({
 
 
 /* ======================
-   HELPERS: PATIENT-INFO + APPOINTMENT
+   HELPERS: EXTRAER-Sesion + PATIENT-INFO + APPOINTMENT
 ====================== */
+
+const extraerSesionMozart = async (page, tenant) => {
+  const tenantToken = await page.evaluate(() => {
+    return localStorage.getItem("tenantToken");
+  });
+
+  if (!tenantToken) {
+    throw new Error(
+      "No se encontró 'tenantToken' en localStorage. Verifica que el login haya sido exitoso antes de llamar esta función."
+    );
+  }
+
+  return {
+    authorization: `Bearer ${tenantToken}`
+  };
+};
 
 const obtenerPacienteId = async (tenant, identificacion) => {
   const { data } = await axios.post(
-    "https://api.salud.mozartai.com.co/api/external/patient-info",
+    `${MOZART_BASE_URL}/api/external/patient-info`,
     { tenant, identificacion },
     {
       headers: {
@@ -43,9 +61,9 @@ const obtenerPacienteId = async (tenant, identificacion) => {
   return pacienteId;
 };
 
-const crearCitaPendiente = async ({ tenant, pacienteId, servicio }) => {
+const crearCitaPendiente = async ({ tenant, pacienteId, servicio, sesionMozart }) => {
   const { data } = await axios.post(
-    "https://api.salud.mozartai.com.co/api/external/appointment",
+    `${MOZART_BASE_URL}/api/tenant/appointments`,
     {
       duracion: 30,
       especialidad: servicio,
@@ -56,7 +74,8 @@ const crearCitaPendiente = async ({ tenant, pacienteId, servicio }) => {
     },
     {
       headers: {
-        "x-api-key": process.env.MOZART_API_KEY,
+        "authorization": sesionMozart.authorization,
+        "X-Tenant": tenant,
         "Content-Type": "application/json",
       },
     }
@@ -65,13 +84,14 @@ const crearCitaPendiente = async ({ tenant, pacienteId, servicio }) => {
   return data;
 };
 
-const crearCitaParaPersona = async (tenant, persona) => {
+const crearCitaParaPersona = async (tenant, persona, sesionMozart) => {
   try {
     const pacienteId = await obtenerPacienteId(tenant, persona.cedula);
     const cita = await crearCitaPendiente({
       tenant,
       pacienteId,
       servicio: persona.servicio,
+      sesionMozart,
     });
 
     return { cedula: persona.cedula, nombre: persona.nombre, ok: true, cita };
@@ -87,7 +107,51 @@ const crearCitaParaPersona = async (tenant, persona) => {
 
 
 
+const detectarSesionExpiradaGuajira = async (page) => {
+  try {
+    // Esperar un momento a que la página estabilice
+    await page.waitForLoadState("domcontentloaded");
+    await page.waitForTimeout(3000);
 
+    const currentUrl = page.url();
+    console.log("🔎 URL actual:", currentUrl);
+
+    // 1️⃣ Si estamos en login, la sesión expiró
+    if (currentUrl.includes("/sso/login")) {
+      console.log("⚠️ Detectado login por URL");
+      return true;
+    }
+
+    // 2️⃣ Si existe el input de usuario, también es login
+    const inputUsuario = page.locator("input[name='username']");
+    if (await inputUsuario.count() > 0) {
+      console.log("⚠️ Detectado formulario de login por selector");
+      return true;
+    }
+
+    // 3️⃣ Buscar mensaje explícito de sesión expirada
+    const textoExpirado = await page.locator("text=/sesión.*expirada/i").count();
+    if (textoExpirado > 0) {
+      console.log("⚠️ Detectado mensaje de sesión expirada");
+      return true;
+    }
+
+    // 4️⃣ Validar que realmente estamos dentro del módulo correcto
+    const estaEnValidador = currentUrl.includes("ValidacionDerechos");
+    if (estaEnValidador) {
+      console.log("✅ Sesión activa");
+      return false;
+    }
+
+    // 5️⃣ Fallback defensivo
+    console.log("⚠️ Estado incierto, asumiendo sesión expirada por seguridad");
+    return true;
+
+  } catch (error) {
+    console.error("Error detectando sesión:", error);
+    return true; // por seguridad, forzar renovación
+  }
+};
 
 
 const detectarSesionExpiradaCristal = async (page) => {
@@ -172,7 +236,483 @@ async function seleccionarCita(page, fecha, hora) {
 }
 
 
+export const AutorizacionGuajira = async (req, res) => {
+  const { documento, tipoDocumento, tenant } = req.body;
 
+  const profileId = process.env.profileIdGuajiraVALIDOR
+  const usuario = process.env.USUARIOGUAJIRAVALIDOR
+  const clave = process.env.CLAVEGUAJIRAVALIDOR
+
+  let session, browser, page;
+  const cupsPermitidos = new Set([
+    "61002", "61302", "401101", "542402", "586102", "601101",
+    "641201", "832102", "851101", "851102", "860101", "860102",
+    "870001", "870003", "870004", "870005", "870006", "870007",
+    "870101", "870102", "870103", "870104", "870105", "870107",
+    "870108", "870112", "870113", "870131", "870601", "870602",
+    "870603", "871010", "871019", "871020", "871030", "871040",
+    "871050", "871060", "871061", "871062", "871070", "871091",
+    "871111", "871112", "871121", "871129", "871208", "871320",
+    "872002", "872011", "872101", "872102", "872103", "872104",
+    "872105", "872121", "872122", "872123", "873001", "873002",
+    "873003", "873004", "873111", "873112", "873121", "873122",
+    "873204", "873205", "873206", "873210", "873302", "873305",
+    "873306", "873311", "873312", "873313", "873314", "873333",
+    "873335", "873340", "873411", "873420", "873423", "873431",
+    "873443", "873444", "876801", "876802", "879111", "879112",
+    "879113", "879116", "879121", "879122", "879131", "879132",
+    "879150", "879161", "879162", "879201", "879205", "879301",
+    "879410", "879420", "879421", "879430", "879460", "879510",
+    "879520", "879522", "879523", "879910", "879990", "881112",
+    "881130", "881131", "881132", "881141", "881151", "881201",
+    "881211", "881212", "881301", "881302", "881305", "881306",
+    "881313", "881332", "881360", "881362", "881401", "881402",
+    "881403", "881431", "881432", "881434", "881435", "881436",
+    "881437", "881501", "881510", "881511", "881601", "881602",
+    "881610", "881611", "881612", "881613", "881620", "881621",
+    "881622", "881630", "881640", "881701", "882112", "882132",
+    "882203", "882212", "882222", "882232", "882242", "882252",
+    "882298", "882307", "882308", "882309", "882316", "882317",
+    "882318", "882602", "882603", "891401", "891410", "891901",
+    "894102", "895001", "895100", "895101", "951302", "1005927",
+    "751101", "881438", "881439", "897011"
+  ]);
+
+  const URL_PORTAL =
+    "https://portal.colsanitas.com/sso/login?service=https%3A%2F%2Fappcore.colsanitas.com%2FValidadorDerechos%2Fpages%2Fgestion%2FValidacionDerechos.seam%3Fcid%3D2349";
+
+  try {
+        session = await client.sessions.create({
+          acceptCookies: true,
+          saveDownloads: true,
+          profile: { id: profileId, persistChanges: false },
+        });
+
+        browser = await chromium.connectOverCDP(session.wsEndpoint);
+        page = browser.contexts()[0].pages()[0];
+
+        await page.goto(URL_PORTAL, { waitUntil: "networkidle" });
+
+        const sesionExpirada = await detectarSesionExpiradaGuajira(page);
+        if (sesionExpirada) {
+          await browser.close();
+          await client.sessions.stop(session.id);
+          await new Promise((r) => setTimeout(r, 2000));
+
+          session = await client.sessions.create({
+            acceptCookies: true,
+            saveDownloads: true,
+            profile: { id: profileId, persistChanges: true },
+          });
+
+          browser = await chromium.connectOverCDP(session.wsEndpoint);
+          page = browser.contexts()[0].pages()[0];
+
+          await page.goto(URL_PORTAL);
+          await page.fill("input[name='username']", usuario);
+          await page.waitForTimeout(1000);
+          await page.fill("input[name='password']", clave);
+          await page.waitForTimeout(1000);
+          await page.locator("input[type='submit'][value='Ingresar']").click({ force: true });
+          await page.waitForTimeout(5000);
+        }
+
+        await page.locator("label", { hasText: "Tipo y Num Identificación" }).waitFor({ state: "visible", timeout: 90000 });
+        await page.locator("label", { hasText: "Tipo y Num Identificación" }).click();
+        await page.waitForTimeout(2000);
+        await page.locator("#formaVDGeneral\\:selectOneTipoDoc").selectOption({ label: tipoDocumento });
+        await page.waitForTimeout(2000);
+        await page.fill("#formaVDGeneral\\:numDocumento", documento);
+        await page.waitForTimeout(1000);
+        await page.locator("#formaVDGeneral\\:j_id77").click();
+        await page.waitForTimeout(3000);
+
+        await page.locator("#formaVDGeneral\\:selectOneCiaId").selectOption({ label: "Todas" });
+        await page.waitForTimeout(1000);
+
+        const opciones = page.locator("#formaVDGeneral\\:selectOnePlanFam label");
+        let tipoEntidad = null;
+
+        for (let i = 0; i < (await opciones.count()); i++) {
+          const texto = await opciones.nth(i).innerText();
+          if (texto.includes("EPS") || texto.includes("COLSANITAS") || texto.includes("COOMEVA")) {
+            tipoEntidad = texto.includes("EPS") ? "EPS" : texto.includes("COLSANITAS") ? "COLSANITAS" : "COOMEVA";
+            await opciones.nth(i).click();
+            break;
+          }
+        }
+
+        if (!tipoEntidad) throw new Error("Entidad no reconocida (EPS/COLSANITAS/COOMEVA)");
+
+        await page.locator("#formaVDGeneral\\:btnConsultarUsuario").click();
+        await page.waitForSelector("#info-usuario", { timeout: 30000 });
+
+        const datosUsuario = await page.evaluate(() => {
+          const c = document.querySelector("#info-usuario");
+          const val = (label) =>
+            Array.from(c.querySelectorAll("label"))
+              .find((l) => l.innerText.includes(label))
+              ?.parentElement.querySelector(".info-dato")
+              ?.innerText.trim() ?? null;
+          return {
+            nombre: c.querySelector("h2")?.innerText.trim() ?? null,
+            estado: val("Estado"),
+          };
+        });
+
+        const esActivo = ["ACTIVO", "VIGENTE"].includes(datosUsuario.estado?.toUpperCase());
+        const nombreFormateado = datosUsuario.nombre
+          ?.split(/[,|_]/)                       
+          .map(word => word.trim())              
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(" ");                        
+
+        const filaTabla = {
+          cedula:             documento,
+          nombres:            nombreFormateado,
+          motivo:             "",
+        };
+
+        if (!esActivo) {
+          filaTabla.motivo = "Paciente inactivo";
+          filaTabla.puedeAgendar = false;
+
+        } else if (tipoEntidad === "COLSANITAS" || tipoEntidad === "COOMEVA") {
+          filaTabla.puedeAgendar = true;
+
+        } else if (tipoEntidad === "EPS") {
+          await page.locator("label", { hasText: "Servicios con Autorización" }).waitFor({ state: "visible", timeout: 90000 });
+          await page.locator("label", { hasText: "Servicios con Autorización" }).click();
+          await page
+            .locator("#formaVDGeneral\\:servicios\\:includeSeleccionUsuario\\:formaSeleccionUsuario\\:continuarPaso0")
+            .click();
+          await page.waitForTimeout(5000);
+
+          const mensajeNoAutorizacion = await page.locator(
+            "#formaVDGeneral\\:servicios\\:includeSeleccionUsuario\\:formaSeleccionUsuario .rich-messages-label"
+          ).elementHandles();
+
+          if (mensajeNoAutorizacion.length > 0) {
+            const texto = await mensajeNoAutorizacion[0].innerText();
+            if (texto.includes("El usuario no tiene volantes expedidos")) {
+              filaTabla.motivo = "No tiene autorizaciones expedidas para el prestador";
+              filaTabla.puedeAgendar = false;
+            }
+          } else {
+            await page.waitForSelector(
+              "#formaVDGeneral\\:servicios\\:includeInformacionServicio\\:frm\\:includeRegistroAdmisionVolantes\\:frm\\:formaConsultaVolantes\\:detListPrest",
+              { timeout: 30000 }
+            );
+
+            const autorizaciones = await page.evaluate(() => {
+              const tbody = document.querySelector(
+                "#formaVDGeneral\\:servicios\\:includeInformacionServicio\\:frm\\:includeRegistroAdmisionVolantes\\:frm\\:formaConsultaVolantes\\:detListPrest\\:tb"
+              );
+              if (!tbody) return [];
+
+              return Array.from(tbody.querySelectorAll("tr.rich-table-row")).map((fila) => {
+                const celdas    = fila.querySelectorAll("td");
+                const subFila   = fila.nextElementSibling?.classList.contains("rich-subtable-row")
+                  ? fila.nextElementSibling : null;
+                const celdasSub = Array.from(subFila?.querySelectorAll("td") || []);
+
+                return {
+                  numeroAutorizacion: celdas[1]?.innerText.trim(),
+                  fechaVigencia:      celdas[4]?.innerText.trim(),
+                  fechaAprobacion:    celdas[3]?.innerText.trim(),
+                  estado:             celdas[5]?.innerText.trim(),
+                  prestador:          celdas[6]?.innerText.trim(),
+                  codigo:             celdasSub[1]?.innerText.trim(),
+                  descripcion:        celdasSub[2]?.innerText.trim(),
+                };
+              });
+            });
+
+            const hoy = moment().tz("America/Bogota").startOf("day");
+
+            const autorizacionesValidas = autorizaciones.filter((a) =>
+              a.estado?.toUpperCase() === "APROBADA" &&
+              a.prestador?.toUpperCase().includes("CLINICA ESPERANZA SAS") &&
+              cupsPermitidos.has(a.codigo?.toUpperCase()) &&
+              moment
+                .tz(a.fechaVigencia, "DD/MM/YYYY", "America/Bogota")
+                .endOf("day")
+                .isSameOrAfter(hoy)
+            );
+
+            if (!autorizacionesValidas.length) {
+              filaTabla.motivo = "No tiene autorizaciones válidas para CLINICA ESPERANZA SAS";
+              filaTabla.puedeAgendar = false;
+            } else {
+              filaTabla.puedeAgendar = true;
+
+              // Iterar sobre TODAS las autorizaciones válidas
+              const autorizacionesConDetalle = [];
+
+              for (const aut of autorizacionesValidas) {
+                const autBase = {
+                  fechaAutorizacion: aut.fechaAprobacion,
+                  fechaExpedicion: aut.fechaVigencia, //CAMBIO
+                  servicio: `${aut.codigo} - ${aut.descripcion}`,
+                  numeroAutorizacion: aut.numeroAutorizacion,
+                  numeroRadicacion: aut.numeroAutorizacion,
+                };
+
+                // Encontrar el índice real de esta autorización en la tabla original
+                const indiceReal = autorizaciones.findIndex(
+                  (a) => a.numeroAutorizacion === aut.numeroAutorizacion
+                );
+
+                if (indiceReal === -1) {
+                  autorizacionesConDetalle.push(autBase);
+                  continue;
+                }
+
+                try {
+                  // Abrir modal de detalles
+                  await page.locator("a", { hasText: "Mostrar" }).nth(indiceReal).click();
+                  await page.waitForSelector("#buscandoDetalle", { state: "hidden", timeout: 30000 });
+                  await page.waitForTimeout(2000);
+
+                  const infoModal = await page.evaluate(() => {
+                    const contenedor = document.querySelector(
+                      "#formaVDGeneral\\:servicios\\:includeInformacionServicio\\:frm\\:includeRegistroAdmisionVolantes\\:frm\\:formaConsultaVolantes\\:detalle-volanteContentDiv"
+                    );
+                    if (!contenedor) return null;
+
+                    const style = window.getComputedStyle(contenedor.parentElement.parentElement);
+                    if (style.display === "none") return null;
+
+                    const tabla = contenedor.querySelector("#tablaDetalleVolante");
+                    if (!tabla) return null;
+
+                    const datos = {};
+                    const filas = tabla.querySelectorAll("tbody > tr");
+
+                    for (let fila of filas) {
+                      const celdas = fila.querySelectorAll("td");
+                      if (celdas.length === 2 && !celdas[0].hasAttribute("colspan")) {
+                        const label = celdas[0].textContent.trim();
+                        const valor = celdas[1].textContent.trim();
+                        if (label === "Lugar") datos.modalidad = valor;
+                        else if (label === "Prestador que ordena:") datos.prestador = valor;
+                      }
+                    }
+
+                    const obsCodif = [];
+                    const tablaObsCodif = contenedor.querySelector("#tablaDetalleVolObsCodif tbody");
+                    if (tablaObsCodif) {
+                      tablaObsCodif.querySelectorAll("tr").forEach((tr) => {
+                        const celdas = tr.querySelectorAll("td");
+                        if (celdas.length === 2) {
+                          obsCodif.push({
+                            codigo: celdas[0].textContent.trim(),
+                            observacion: celdas[1].textContent.trim(),
+                          });
+                        }
+                      });
+                    }
+
+                    datos.observacionesCodificadas = obsCodif;
+                    return datos;
+                  });
+
+                  if (infoModal) {
+                    autBase.modalidad = infoModal.modalidad;
+                    autBase.prestadorQueOrdena = infoModal.prestador;
+                    autBase.observacionesCodificadas = infoModal.observacionesCodificadas;
+                  }
+
+                  // Cerrar modal
+                  await page.evaluate(() => {
+                    const modal = document.getElementById(
+                      "formaVDGeneral:servicios:includeInformacionServicio:frm:includeRegistroAdmisionVolantes:frm:formaConsultaVolantes:detalle-volante"
+                    );
+                    if (modal?.component) modal.component.hide();
+                  });
+                  await page.waitForTimeout(1500);
+
+                  // Click en Seleccionar usando el índice real
+                  await page.locator(
+                    `#formaVDGeneral\\:servicios\\:includeInformacionServicio\\:frm\\:includeRegistroAdmisionVolantes\\:frm\\:formaConsultaVolantes\\:detListPrest\\:${indiceReal}\\:linkSeleccionarVol2`
+                  ).click();
+
+                  await page.waitForSelector(
+                    "#formaVDGeneral\\:servicios\\:includeInformacionServicio\\:frm\\:includeRegistroAdmisionVolantes\\:frm\\:formaConsultaVolantes\\:selectCausaExterna",
+                    { state: "visible", timeout: 30000 }
+                  );
+                  await page.waitForTimeout(2000);
+
+                  const infoRips = await page.evaluate(() => {
+                    const getSelectedText = (id) => {
+                      const el = document.getElementById(id);
+                      return el?.options[el.selectedIndex]?.text?.trim() ?? null;
+                    };
+                    const p = "formaVDGeneral:servicios:includeInformacionServicio:frm:includeRegistroAdmisionVolantes:frm:formaConsultaVolantes:";
+                    const diagTabla = document.querySelector("#diagnosticoContainer tbody tr");
+
+                    return {
+                      causaExterna:         getSelectedText(p + "selectCausaExterna"),
+                      grupoServicio:        getSelectedText(p + "selectGroupService"),
+                      modalidadAtencion:    getSelectedText(p + "selectModeOfCare"),
+                      finalidad:            getSelectedText(p + "selectFinalidad"),
+                      diagnosticoPrincipal: {
+                        codigo:      diagTabla?.querySelector("td:nth-child(1)")?.innerText?.trim() ?? null,
+                        descripcion: diagTabla?.querySelector("td:nth-child(2)")?.innerText?.trim() ?? null,
+                      },
+                    };
+                  });
+
+                  if (infoRips) {
+                    autBase.rips = infoRips;
+                  }
+
+                } catch (err) {
+                  console.warn(`⚠️ Error extrayendo detalle de autorización ${aut.numeroAutorizacion}:`, err.message);
+                }
+
+                autorizacionesConDetalle.push(autBase);
+              }
+
+              filaTabla.autorizaciones = autorizacionesConDetalle;
+            }
+          }
+        }
+
+        // console.log("✅ Fila lista para la tabla:", JSON.stringify(filaTabla, null, 2));
+
+        const filasExcel = transformarAutorizacionesGuajira(filaTabla);
+        if (filaTabla.puedeAgendar) {
+          const buffer = generarExcelBuffer(filasExcel);
+          console.log("filas excel construido: ", filasExcel)
+
+          const contextGlobal = browser.contexts()[0];
+          const pageMozartia = await contextGlobal.newPage();
+
+          await pageMozartia.goto(`https://salud.mozartai.com.co/${tenant}/login`, {
+            waitUntil: "networkidle",
+          });
+
+          // elegir email según tenant
+          const emailMozart =
+            tenant === "cemdiprueba"
+              ? process.env.mozartEmailCemdiPrueba
+              : process.env.mozartEmail;
+
+          await pageMozartia
+            .locator('input[name="email"]')
+            .fill(emailMozart);
+          await pageMozartia
+            .locator('input[name="password"]')
+            .fill(process.env.mozartPassword);
+          await pageMozartia
+            .getByRole("button", { name: /Acceder al Sistema/i })
+            .click();
+
+          await pageMozartia.waitForFunction(
+            (tenant) => {
+              return (
+                location.pathname.startsWith(`/${tenant}`) ||
+                location.pathname.startsWith("/medical-authorizations")
+              );
+            },
+            tenant,
+            { timeout: 60000 },
+          );
+
+          await pageMozartia.getByRole("button", { name: /Aceptar/i }).click();
+
+          await pageMozartia.goto(
+            `https://salud.mozartai.com.co/${tenant}/medical-authorizations`,
+            { waitUntil: "networkidle" },
+          );
+
+          await pageMozartia
+            .getByRole("button", {
+              name: /Carga Masiva/i,
+            })
+            .waitFor({ state: "visible" });
+
+          await pageMozartia
+            .getByRole("button", {
+              name: /Carga Masiva/i,
+            })
+            .click();
+
+          const fileInput = pageMozartia.locator(
+            'input[type="file"][accept*=".xlsx"]',
+          );
+
+          await fileInput.waitFor({ state: "visible" });
+
+          await fileInput.setInputFiles({
+            name: "autorizaciones.xlsx",
+            mimeType:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            buffer: buffer,
+          });
+
+          const cargarBtn = pageMozartia.getByRole("button", {
+            name: /Cargar Archivo/i,
+          });
+
+          await pageMozartia
+            .locator('button:not([disabled]):has-text("Cargar Archivo")')
+            .waitFor({ state: "visible", timeout: 15000 });
+
+          await cargarBtn.click();
+          await page.waitForTimeout(2500);
+          console.log("✅ Excel subido a Mozart");
+
+        } else {
+          console.log("⏭️ Paciente no puede agendar, se omite carga a Mozart:", filaTabla.motivo);
+        }
+
+
+        // if (sesionExpirada) await client.sessions.stop(session.id);
+
+        console.log({
+          documento,
+          estado: "completado",
+          puedeAgendar: filaTabla.puedeAgendar,
+          motivo: filaTabla.motivo ?? "",
+          datos: filaTabla,
+        })
+
+        return res.status(200).json({
+          documento,
+          estado: "completado",
+          puedeAgendar: filaTabla.puedeAgendar,
+          motivo: filaTabla.motivo ?? "",
+          datos: filaTabla,
+        });
+
+      } catch (err) {
+        console.error("❌ Error:", err.message);
+        return res.status(500).json({
+          documento,
+          estado: "error",
+          puedeAgendar: false,
+          motivo: "Error al procesar la solicitud",
+          error: err.message,
+          timestamp: new Date().toISOString(),
+      });
+      
+  } finally {
+    console.log("🔒 Cerrando sesión Hyperbrowser...");
+    try {
+      if (browser) await browser.close();
+    } catch (e) {
+      console.log("Error cerrando browser:", e.message);
+    }
+    try {
+      if (session) await client.sessions.stop(session.id);
+      console.log("✅ Sesión cerrada correctamente");
+    } catch (e) {
+      console.log("Error cerrando sesión:", e.message);
+    }
+  }
+};
 
 
 export const descargarAutorizacionEsperanza = async (req, res) => {
@@ -258,6 +798,8 @@ export const descargarAutorizacionEsperanza = async (req, res) => {
 
     await pageMozartia.getByRole("button", { name: /Aceptar/i }).click();
 
+    const sesionMozart = await extraerSesionMozart(pageMozartia, tenant);
+
     await pageMozartia.goto(
       `https://salud.mozartai.com.co/${tenant}/medical-authorizations`,
       { waitUntil: "networkidle" }
@@ -302,7 +844,7 @@ export const descargarAutorizacionEsperanza = async (req, res) => {
 
     const resultadosCitas = [];
     for (const persona of personasSubidas) {
-      const resultado = await crearCitaParaPersona(tenant, persona);
+      const resultado = await crearCitaParaPersona(tenant, persona, sesionMozart);
       resultadosCitas.push(resultado);
     }
 
@@ -355,7 +897,7 @@ export const AgendarCitaGuajiraCristal = async (req, res) => {
   const {
     documento, fechaCita, horaCita, centroCosto, codigoServicio, tipoAtencion,
     numeroAutorizacion, fechaAutorizacion, fechaVencimiento, copago, valorCopago,
-    tipoCopago, valorCita, observaciones, acompanante, responsable,
+    tipoCopago, valorCita, observaciones, acompanante, responsable, especialidadCristal,
     // Campos Mozart
     doctorId, tipo, tenant, pacienteId, especialidad, autorizacionId, sedeId, citaId
   } = req.body;
@@ -536,20 +1078,12 @@ export const AgendarCitaGuajiraCristal = async (req, res) => {
         await botonLista.waitFor();
         await botonLista.click();
 
-        // abrir select especialidad
         const especialidadInput = page.locator('input[aria-label="Especialidad"]');
-
         await especialidadInput.click();
+        await especialidadInput.fill(especialidadCristal);
 
-        // escribir para filtrar
-        await especialidadInput.fill('PERINATOLOGÍA');
-
-        // esperar opción
-        const opcion = page.locator('.q-menu .q-item', {
-          hasText: 'PERINATOLOGÍA O MEDICINA FETAL'
-        }).first();
-
-        await opcion.waitFor();
+        const opcion = page.locator('.q-menu .q-item', { hasText: especialidadCristal }).first();
+        await opcion.waitFor({ state: 'visible' });
         await opcion.click();
         await page.waitForTimeout(2000);
         await page.locator('input[aria-label="Fecha Inicial"]').fill(fechaCitaFormateada);
@@ -792,7 +1326,7 @@ export const AgendarCitaGuajiraCristal = async (req, res) => {
         // ─────────────────────────────────────────────
         console.log("🎵 Agendando en Mozart...");
 
-        const mozartResponse = await fetch("https://new.api.mozartia.com/api/external/appointment", {
+        const mozartResponse = await fetch(`${MOZART_BASE_URL}/api/external/appointment`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -864,7 +1398,7 @@ export const AgendarCitaGuajiraCristal = async (req, res) => {
 
 
 export const ReAgendarCitaGuajiraCristal = async (req, res) => {
-  const { fechaAntigua, horaAntigua, nuevaFecha, nuevaHora, observacion, especialidad, pacienteId, tenant, tipo, doctorId, citaIdOriginal } = req.body
+  const { fechaAntigua, horaAntigua, nuevaFecha, nuevaHora, observacion, especialidad, pacienteId, tenant, tipo, doctorId, citaIdOriginal, especialidadCristal } = req.body
 
   const formatearFecha = (f) => {
     if (!f) return f;
@@ -994,14 +1528,10 @@ export const ReAgendarCitaGuajiraCristal = async (req, res) => {
 
         const especialidadInput = page.locator('input[aria-label="Seleccione una especialidad"]');
         await especialidadInput.click();
-        await especialidadInput.fill('PERINATOLOGÍA');
+        await especialidadInput.fill(especialidadCristal);
 
-        // esperar opción
-        const opcion = page.locator('.q-menu .q-item', {
-          hasText: 'PERINATOLOGÍA O MEDICINA FETAL'
-        }).first();
-
-        await opcion.waitFor();
+        const opcion = page.locator('.q-menu .q-item', { hasText: especialidadCristal }).first();
+        await opcion.waitFor({ state: 'visible' });
         await opcion.click();
 
         await page.waitForTimeout(1500);
@@ -1046,7 +1576,7 @@ export const ReAgendarCitaGuajiraCristal = async (req, res) => {
 
         //MOZART REAGENDAMIENTO
 
-        const mozartResponse = await fetch("https://new.api.mozartia.com/api/external/reschedule-appointment", {
+        const mozartResponse = await fetch(`${MOZART_BASE_URL}/api/external/reschedule-appointment`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1115,7 +1645,7 @@ export const ReAgendarCitaGuajiraCristal = async (req, res) => {
 }
 
 export const CancelarCitaGuajiraCristal = async (req, res) => {
-  const { fecha, hora, observacion, citaId, tenant } = req.body
+  const { fecha, hora, observacion, citaId, tenant, especialidadCristal } = req.body
 
   const fechaCancelar = (() => {
     if (!fecha) return fecha;
@@ -1242,14 +1772,10 @@ export const CancelarCitaGuajiraCristal = async (req, res) => {
 
         const especialidad = page.locator('input[aria-label="Seleccione una especialidad"]');
         await especialidad.click();
-        await especialidad.fill('PERINATOLOGÍA');
+        await especialidad.fill(especialidadCristal);
 
-        // esperar opción
-        const opcion = page.locator('.q-menu .q-item', {
-          hasText: 'PERINATOLOGÍA O MEDICINA FETAL'
-        }).first();
-
-        await opcion.waitFor();
+        const opcion = page.locator('.q-menu .q-item', { hasText: especialidadCristal }).first();
+        await opcion.waitFor({ state: 'visible' });
         await opcion.click();
 
         await page.waitForTimeout(1500);
@@ -1290,7 +1816,7 @@ export const CancelarCitaGuajiraCristal = async (req, res) => {
 
         //MOZART REAGENDAMIENTO
 
-        const mozartResponse = await fetch("https://new.api.mozartia.com/api/external/cancel-appointment", {
+        const mozartResponse = await fetch(`${MOZART_BASE_URL}/api/external/cancel-appointment`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
