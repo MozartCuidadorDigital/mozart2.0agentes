@@ -9,6 +9,8 @@ import { leerExcelDesdeBuffer } from "../../../utils/excel/leerExcel.js";
 
 dotenv.config();
 
+const normalizar = (str) => str.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+
 const MOZART_BASE_URL = "https://api.salud.mozartai.com.co";
 
 let browser, page, session; 
@@ -1080,18 +1082,25 @@ export const AgendarCitaGuajiraCristal = async (req, res) => {
 
         const especialidadInput = page.locator('input[aria-label="Especialidad"]');
         await especialidadInput.click();
-        await especialidadInput.fill(especialidadCristal);
 
-        const opcion = page.locator('.q-menu .q-item', { hasText: especialidadCristal }).first();
-        await opcion.waitFor({ state: 'visible' });
-        await opcion.click();
-        await page.waitForTimeout(2000);
+        await page.locator('.q-menu').waitFor({ state: 'visible', timeout: 5000 });
+        const itemsTexts = await page.locator('.q-menu .q-item').allTextContents();
+        const matchIdx = itemsTexts.findIndex(t => normalizar(t).includes(normalizar(especialidadCristal)));
+        if (matchIdx === -1) {
+          return res.status(404).json({ mensaje: `Especialidad "${especialidadCristal}" no encontrada en Cristal` });
+        }
+        await page.locator('.q-menu .q-item').nth(matchIdx).click();
         await page.locator('input[aria-label="Fecha Inicial"]').fill(fechaCitaFormateada);
+
+
         await page.waitForTimeout(2000);
         await page.locator('input[aria-label="Fecha final"]').fill(fechaCitaFormateada);
 
-        const valor = await page.locator('input[aria-label="Fecha Inicial"]').inputValue();
-        console.log(valor);
+        await page.waitForTimeout(1000);
+        const sinDatosEspecialidad = page.locator('.q-table__bottom--nodata');
+        if (await sinDatosEspecialidad.count() > 0) {
+          return res.status(404).json({ mensaje: `Sin disponibilidad para la especialidad "${especialidadCristal}" en Cristal` });
+        }
 
         const citaEncontrada = await seleccionarCita(page, fechaCita, horaCita);
 
@@ -1528,13 +1537,21 @@ export const ReAgendarCitaGuajiraCristal = async (req, res) => {
 
         const especialidadInput = page.locator('input[aria-label="Seleccione una especialidad"]');
         await especialidadInput.click();
-        await especialidadInput.fill(especialidadCristal);
 
-        const opcion = page.locator('.q-menu .q-item', { hasText: especialidadCristal }).first();
-        await opcion.waitFor({ state: 'visible' });
-        await opcion.click();
-
+        await page.locator('.q-menu').waitFor({ state: 'visible', timeout: 5000 });
+        const itemsTexts = await page.locator('.q-menu .q-item').allTextContents();
+        const matchIdx = itemsTexts.findIndex(t => normalizar(t).includes(normalizar(especialidadCristal)));
+        if (matchIdx === -1) {
+          return res.status(404).json({ mensaje: `Especialidad "${especialidadCristal}" no encontrada en Cristal` });
+        }
+        await page.locator('.q-menu .q-item').nth(matchIdx).click();
         await page.waitForTimeout(1500);
+
+        await page.waitForTimeout(1000);
+        const sinDatos = page.locator('.q-table__bottom--nodata');
+        if (await sinDatos.count() > 0) {
+          return res.status(404).json({ mensaje: `Sin disponibilidad para la especialidad "${especialidadCristal}" en Cristal` });
+        }
         await page.getByRole('button', { name: 'Ocupado' }).click();
 
         const fila = page.locator('tr.q-tr', {
@@ -1772,13 +1789,21 @@ export const CancelarCitaGuajiraCristal = async (req, res) => {
 
         const especialidad = page.locator('input[aria-label="Seleccione una especialidad"]');
         await especialidad.click();
-        await especialidad.fill(especialidadCristal);
 
-        const opcion = page.locator('.q-menu .q-item', { hasText: especialidadCristal }).first();
-        await opcion.waitFor({ state: 'visible' });
-        await opcion.click();
-
+        await page.locator('.q-menu').waitFor({ state: 'visible', timeout: 5000 });
+        const itemsTexts = await page.locator('.q-menu .q-item').allTextContents();
+        const matchIdx = itemsTexts.findIndex(t => normalizar(t).includes(normalizar(especialidadCristal)));
+        if (matchIdx === -1) {
+          return res.status(404).json({ mensaje: `Especialidad "${especialidadCristal}" no encontrada en Cristal` });
+        }
+        await page.locator('.q-menu .q-item').nth(matchIdx).click();
         await page.waitForTimeout(1500);
+
+        await page.waitForTimeout(1000);
+        const sinDatos = page.locator('.q-table__bottom--nodata');
+        if (await sinDatos.count() > 0) {
+          return res.status(404).json({ mensaje: `Sin disponibilidad para la especialidad "${especialidadCristal}" en Cristal` });
+        }
         await page.getByRole('button', { name: 'Ocupado' }).click();
 
         const fila = page.locator('tr.q-tr', {
@@ -1878,4 +1903,204 @@ export const CancelarCitaGuajiraCristal = async (req, res) => {
     }
   }
 
+}
+
+
+export const disponibilidadQrystalMozart = async (req, res) => {
+  
+  const { especialidadCristal } = req.body;
+  const usuario = process.env.USUARIOGUAJIRA
+  const clave = process.env.CLAVEGUAJIRA
+  const profileId = process.env.profileIdGuajira
+
+  let session = null;
+  let browser = null;
+  let procesando = true;
+
+  try {
+    // Intentar con el perfil existente
+    session = await client.sessions.create({ 
+      acceptCookies: true,
+      profile: {
+        id: profileId,
+        persistChanges: true,
+      }
+    });
+
+    browser = await chromium.connectOverCDP(session.wsEndpoint);
+    let context = browser.contexts()[0];
+    let page = context.pages()[0];
+
+    const manejarModalActualizacion = (paginaActual) => {
+      (async () => {
+        while (procesando) {
+          try {
+            const btnPostergar = paginaActual.locator('.q-dialog button span.block', {
+              hasText: 'Postergar'
+            }).first();
+            if (await btnPostergar.count() > 0) {
+              console.log("🔔 Modal de actualización detectado - Postergando...");
+              await btnPostergar.click();
+            }
+          } catch (e) {}
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      })();
+    };
+
+    manejarModalActualizacion(page);
+
+    await page.goto("https://api-test.qrystalos.com/#/autenticarse");
+
+    const selectorInput = 'input[aria-label="Organización *"]';
+    await page.click(selectorInput);
+    await page.fill(selectorInput, 'Pruebas Clinica esperanza');
+    await page.click('div.q-item span:has-text("Pruebas Clinica esperanza")');
+
+    await page.locator('input[aria-label="Usuario *"]').fill(usuario);
+    await page.locator('input[aria-label="Clave Secreta *"]').fill(clave);
+
+    await page.click('button:has-text("Continuar")');
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1500);
+
+    await page.goto("https://api-test.qrystalos.com/#/ce", { waitUntil: "networkidle" });
+
+        // Continuar con el flujo normal
+        await page.goto("https://api-test.qrystalos.com/#/ce", {
+          waitUntil: "networkidle"
+        });
+
+        await page.waitForTimeout(2000);
+
+        await page.goto("https://api-test.qrystalos.com/#/ce/agendamiento", {
+          waitUntil: "networkidle"
+        });
+
+        console.log("✅ Entró a Agenda correctamente");
+
+        const botonLista = page.locator('.accion-btn').nth(2);
+
+        await botonLista.waitFor();
+        await botonLista.click();
+
+        // abrir select especialidad
+        const especialidadInput = page.locator('input[aria-label="Especialidad"]');
+
+        await especialidadInput.click();
+
+        await page.locator('.q-menu').waitFor({ state: 'visible', timeout: 5000 });
+        const itemsTexts = await page.locator('.q-menu .q-item').allTextContents();
+        const matchIdx = itemsTexts.findIndex(t => normalizar(t).includes(normalizar(especialidadCristal)));
+        if (matchIdx === -1) {
+          return res.status(404).json({ mensaje: `Especialidad "${especialidadCristal}" no encontrada en Cristal` });
+        }
+        await page.locator('.q-menu .q-item').nth(matchIdx).click();
+
+
+        await page.waitForTimeout(1000);
+        const sinDatos = page.locator('.q-table__bottom--nodata');
+        if (await sinDatos.count() > 0) {
+          return res.status(404).json({ mensaje: `Sin disponibilidad para la especialidad "${especialidadCristal}" en Cristal` });
+        }
+        const fechaInicial = await page.locator('input[aria-label="Fecha Inicial"]').inputValue();
+        const fechaFinal = moment(fechaInicial).add(1, 'month').format('YYYY-MM-DD');
+
+        const inputFechaFinal = page.locator('input[aria-label="Fecha final"]');
+        await inputFechaFinal.fill(fechaFinal);
+
+        await page.waitForTimeout(1000);
+
+
+        // Extraer datos de todas las páginas
+        const extraerDatosTabla = async (page) => {
+          return await page.evaluate(() => {
+            const filas = document.querySelectorAll('.q-table tbody tr');
+            const datos = [];
+            filas.forEach(fila => {
+              const celdas = fila.querySelectorAll('td span.cursor-pointer');
+              if (celdas.length > 0) {
+                datos.push({
+                  dia: celdas[1]?.innerText?.trim(),
+                  fecha: celdas[2]?.innerText?.trim(),
+                });
+              }
+            });
+            return datos;
+          });
+        };
+
+        const todasLasCitas = [];
+
+        while (true) {
+          await page.waitForTimeout(500);
+          const datos = await extraerDatosTabla(page);
+          todasLasCitas.push(...datos);
+
+          const btnSiguiente = page.locator('button[aria-label="Próxima página"]');
+          const estaDeshabilitado = await btnSiguiente.getAttribute('disabled');
+
+          if (estaDeshabilitado !== null) {
+            console.log("✅ Se llegó a la última página");
+            break;
+          }
+
+          await btnSiguiente.click();
+        }
+
+        // Si hay menos de 10 citas, ampliar a 2 meses
+        if (todasLasCitas.length < 5) {
+          console.log(`⚠️ Poca disponibilidad (${todasLasCitas.length} citas), ampliando a 2 meses...`);
+          todasLasCitas.length = 0; // limpiar
+
+          fechaFinal = moment(fechaInicial).add(2, 'months').format('YYYY-MM-DD');
+          await inputFechaFinal.fill(fechaFinal);
+          await page.waitForTimeout(500);
+
+          while (true) {
+            await page.waitForTimeout(500);
+            const datos = await extraerDatosTabla(page);
+            todasLasCitas.push(...datos);
+
+            const btnSiguiente = page.locator('button[aria-label="Próxima página"]');
+            const estaDeshabilitado = await btnSiguiente.getAttribute('disabled');
+
+            if (estaDeshabilitado !== null) {
+              console.log("✅ Se llegó a la última página (2 meses)");
+              break;
+            }
+
+            await btnSiguiente.click();
+          }
+        }
+
+        console.log("📅 Total citas encontradas:", todasLasCitas.length);
+
+        res.status(200).json({
+          mensaje: "Disponibilidad consultada correctamente",
+          total: todasLasCitas.length,
+          disponibilidad: todasLasCitas,
+        });
+
+        } catch (error) {
+        console.error("❌ Error:", error.message);
+        if (!res.headersSent) {
+          res.status(500).json({
+            mensaje: "Error al consultar el estado de la cita",
+            error: error.message,
+          });
+        }
+      }finally {
+        
+        procesando = false;
+
+        if (browser) {
+          await browser.close().catch(e => console.warn("⚠️ Error cerrando browser:", e.message));
+        }
+        if (session) {
+          await client.sessions.stop(session.id).catch(e => console.warn("⚠️ Error cerrando sesión:", e.message));
+        }
+
+        console.log("🔒 Sesión y browser cerrados correctamente");
+      }
 }

@@ -2,7 +2,7 @@ import express from "express";
 import { descargarAutorizacion, enviarCorreoCitaEndpoint } from "../controllers/automatizaciones/famisanar/automatizacion.js";
 import { enviarCorreoComercial } from "../controllers/automatizaciones/comercial/automatizacion.js";
 import { enviarTemplateWP } from "../controllers/automatizaciones/coosalud/automatizacion.js";
-import { AgendarCitaGuajiraCristal, AutorizacionGuajira, CancelarCitaGuajiraCristal, descargarAutorizacionEsperanza, ReAgendarCitaGuajiraCristal } from "../controllers/automatizaciones/guajira/automatizacion.js";
+import { AgendarCitaGuajiraCristal, AutorizacionGuajira, CancelarCitaGuajiraCristal, descargarAutorizacionEsperanza, disponibilidadQrystalMozart, ReAgendarCitaGuajiraCristal } from "../controllers/automatizaciones/guajira/automatizacion.js";
 import multer from "multer";
 
 const storage = multer.memoryStorage();
@@ -27,5 +27,6 @@ router.post(
 router.post("/agendarCitaQrystalos", AgendarCitaGuajiraCristal)
 router.post("/reagendarCitaQrystalos", ReAgendarCitaGuajiraCristal)
 router.post("/cancelarCitaQrystalos", CancelarCitaGuajiraCristal)
+router.post("/disponibilidad", disponibilidadQrystalMozart)
 
 export default router;
