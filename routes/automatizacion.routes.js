@@ -27,6 +27,6 @@ router.post(
 router.post("/agendarCitaQrystalos", AgendarCitaGuajiraCristal)
 router.post("/reagendarCitaQrystalos", ReAgendarCitaGuajiraCristal)
 router.post("/cancelarCitaQrystalos", CancelarCitaGuajiraCristal)
-router.post("/disponibilidad", disponibilidadQrystalMozart)
+router.post("/disponibilidadQrystalos", disponibilidadQrystalMozart)
 
 export default router;
