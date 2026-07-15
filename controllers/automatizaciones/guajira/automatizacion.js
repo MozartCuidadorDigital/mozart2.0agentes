@@ -12,6 +12,8 @@ dotenv.config();
 const normalizar = (str) => str.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
 
 const MOZART_BASE_URL = "https://api.salud.mozartai.com.co";
+const QRYSTALOS_BASE_URL = "https://qrystalos.com";
+const QRYSTALOS_ORGANIZACION = "Clinica + Esperanza";
 
 let browser, page, session; 
 let contextGlobal;
@@ -966,9 +968,25 @@ export const AgendarCitaGuajiraCristal = async (req, res) => {
       })();
     };
 
-    manejarModalActualizacion(page);
+    const manejarModalAviso = (paginaActual) => {
+      (async () => {
+        while (procesando) {
+          try {
+            const btnEntendido = paginaActual.locator('button.bg-red-8:has(span.block:text("Entendido"))').first();
+            if (await btnEntendido.count() > 0) {
+              console.log("🔔 Modal de aviso detectado - Cerrando...");
+              await btnEntendido.click();
+            }
+          } catch (e) {}
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      })();
+    };
 
-    await page.goto("https://api-test.qrystalos.com/#/ce", { waitUntil: "networkidle" });
+    manejarModalActualizacion(page);
+    manejarModalAviso(page);
+
+    await page.goto(`${QRYSTALOS_BASE_URL}/#/ce`, { waitUntil: "networkidle" });
 
     const sesionExpirada = await detectarSesionExpiradaCristal(page);
 
@@ -995,13 +1013,13 @@ export const AgendarCitaGuajiraCristal = async (req, res) => {
       manejarModalActualizacion(page);
 
       // Login
-      await page.goto("https://api-test.qrystalos.com/#/autenticarse");
+      await page.goto(`${QRYSTALOS_BASE_URL}/#/autenticarse`);
 
       const selectorInput = 'input[aria-label="Organización *"]';
       await page.click(selectorInput);
-      await page.fill(selectorInput, 'Pruebas Clinica esperanza');
-      await page.waitForSelector('div.q-item span:has-text("Pruebas Clinica esperanza")');
-      await page.click('div.q-item span:has-text("Pruebas Clinica esperanza")');
+      await page.fill(selectorInput, QRYSTALOS_ORGANIZACION);
+      await page.waitForSelector(`div.q-item span:has-text("${QRYSTALOS_ORGANIZACION}")`);
+      await page.click(`div.q-item span:has-text("${QRYSTALOS_ORGANIZACION}")`);
 
       const usuarioInput = page.locator('input[aria-label="Usuario *"]').first();
       await usuarioInput.waitFor({ state: 'attached' });
@@ -1020,13 +1038,13 @@ export const AgendarCitaGuajiraCristal = async (req, res) => {
         await page.waitForTimeout(1000);
 
         // Continuar con el flujo normal
-        await page.goto("https://api-test.qrystalos.com/#/ce", {
+        await page.goto(`${QRYSTALOS_BASE_URL}/#/ce`, {
           waitUntil: "networkidle"
         });
 
         await page.waitForTimeout(1500);
 
-        await page.goto("https://api-test.qrystalos.com/#/ce/agendamiento", {
+        await page.goto(`${QRYSTALOS_BASE_URL}/#/ce/agendamiento`, {
           waitUntil: "networkidle"
         });
 
@@ -1055,28 +1073,33 @@ export const AgendarCitaGuajiraCristal = async (req, res) => {
           });
         }
 
-        // 3️⃣ Esperar la tabla con resultados
-        await page.waitForSelector('.q-table tbody tr.q-tr.cursor-pointer');
+        // Esperar tabla con resultados
+        await page.waitForSelector('.q-table tbody tr.q-tr.cursor-pointer', { timeout: 10000 });
 
-        // 4️⃣ Buscar la fila que tenga el documento
-        const fila = page.locator('.q-table tbody tr.q-tr.cursor-pointer', {
-          hasText: documento
-        }).first();
+        const sinDatosTabla = await page.locator('.q-table tbody tr.q-tr.cursor-pointer').count() === 0;
+        if (sinDatosTabla) {
+          return res.status(404).json({ mensaje: "Paciente no encontrado en Cristal", documento, encontrado: false });
+        }
 
+        // Click en la fila del paciente
+        const fila = page.locator('.q-table tbody tr.q-tr.cursor-pointer', { hasText: documento }).first();
         await fila.waitFor();
         await fila.click();
 
-        // esperar que aparezca el panel expandido
-        const botonSeleccionar = page.locator('button', {
-          hasText: 'Seleccionar'
-        }).last(); // usamos el último porque el primero es otro
+        // Esperar a que aparezca el panel o el botón Seleccionar
+        const aparecioPanel = await page.locator('.afi-actions-panel__header').waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
 
-        await botonSeleccionar.waitFor({ state: "visible" });
+        if (aparecioPanel) {
+          const botonSeleccionarTarjeta = page.locator('.afi-actions-panel i.fa-solid.fa-arrow-pointer').locator('xpath=../..');
+          await botonSeleccionarTarjeta.click();
+        } else {
+          const botonSeleccionar = page.locator('button', { hasText: 'Seleccionar' }).last();
+          await botonSeleccionar.waitFor({ state: 'visible' });
+          await botonSeleccionar.click();
+        }
 
-        await botonSeleccionar.click();
 
         const botonLista = page.locator('.accion-btn').nth(2);
-
         await botonLista.waitFor();
         await botonLista.click();
 
@@ -1383,10 +1406,9 @@ export const AgendarCitaGuajiraCristal = async (req, res) => {
           mozart: "agendado",
           mozartData
         });
-
-       
-      } catch (error) {
-        console.error("❌ Error:", error.message);
+      
+  } catch (error) {
+    console.error("❌ Error:", error.message);
         if (!res.headersSent) {
           res.status(500).json({
             mensaje: "Error al agendar la cita",
@@ -1468,7 +1490,7 @@ export const ReAgendarCitaGuajiraCristal = async (req, res) => {
 
     manejarModalActualizacion(page);
 
-    await page.goto("https://api-test.qrystalos.com/#/ce", { waitUntil: "networkidle" });
+    await page.goto(`${QRYSTALOS_BASE_URL}/#/ce`, { waitUntil: "networkidle" });
 
     const sesionExpirada = await detectarSesionExpiradaCristal(page);
 
@@ -1495,13 +1517,13 @@ export const ReAgendarCitaGuajiraCristal = async (req, res) => {
       manejarModalActualizacion(page);
 
       // Login
-      await page.goto("https://api-test.qrystalos.com/#/autenticarse");
+      await page.goto(`${QRYSTALOS_BASE_URL}/#/autenticarse`);
 
       const selectorInput = 'input[aria-label="Organización *"]';
       await page.click(selectorInput);
-      await page.fill(selectorInput, 'Pruebas Clinica esperanza');
-      await page.waitForSelector('div.q-item span:has-text("Pruebas Clinica esperanza")');
-      await page.click('div.q-item span:has-text("Pruebas Clinica esperanza")');
+      await page.fill(selectorInput, QRYSTALOS_ORGANIZACION);
+      await page.waitForSelector(`div.q-item span:has-text("${QRYSTALOS_ORGANIZACION}")`);
+      await page.click(`div.q-item span:has-text("${QRYSTALOS_ORGANIZACION}")`);
 
       const usuarioInput = page.locator('input[aria-label="Usuario *"]').first();
       await usuarioInput.waitFor({ state: 'attached' });
@@ -1518,13 +1540,13 @@ export const ReAgendarCitaGuajiraCristal = async (req, res) => {
     }
 
         // Continuar con el flujo normal
-        await page.goto("https://api-test.qrystalos.com/#/ce", {
+        await page.goto(`${QRYSTALOS_BASE_URL}/#/ce`, {
           waitUntil: "networkidle"
         });
 
         await page.waitForTimeout(3000);
 
-        await page.goto("https://api-test.qrystalos.com/#/ce/agendamiento", {
+        await page.goto(`${QRYSTALOS_BASE_URL}/#/ce/agendamiento`, {
           waitUntil: "networkidle"
         });
 
@@ -1722,7 +1744,7 @@ export const CancelarCitaGuajiraCristal = async (req, res) => {
 
     manejarModalActualizacion(page);
 
-    await page.goto("https://api-test.qrystalos.com/#/ce", { waitUntil: "networkidle" });
+    await page.goto(`${QRYSTALOS_BASE_URL}/#/ce`, { waitUntil: "networkidle" });
 
     const sesionExpirada = await detectarSesionExpiradaCristal(page);
 
@@ -1749,13 +1771,13 @@ export const CancelarCitaGuajiraCristal = async (req, res) => {
       manejarModalActualizacion(page);
 
       // Login
-      await page.goto("https://api-test.qrystalos.com/#/autenticarse");
+      await page.goto(`${QRYSTALOS_BASE_URL}/#/autenticarse`);
 
       const selectorInput = 'input[aria-label="Organización *"]';
       await page.click(selectorInput);
-      await page.fill(selectorInput, 'Pruebas Clinica esperanza');
-      await page.waitForSelector('div.q-item span:has-text("Pruebas Clinica esperanza")');
-      await page.click('div.q-item span:has-text("Pruebas Clinica esperanza")');
+      await page.fill(selectorInput, QRYSTALOS_ORGANIZACION);
+      await page.waitForSelector(`div.q-item span:has-text("${QRYSTALOS_ORGANIZACION}")`);
+      await page.click(`div.q-item span:has-text("${QRYSTALOS_ORGANIZACION}")`);
 
       const usuarioInput = page.locator('input[aria-label="Usuario *"]').first();
       await usuarioInput.waitFor({ state: 'attached' });
@@ -1772,13 +1794,13 @@ export const CancelarCitaGuajiraCristal = async (req, res) => {
     }
 
         // Continuar con el flujo normal
-        await page.goto("https://api-test.qrystalos.com/#/ce", {
+        await page.goto(`${QRYSTALOS_BASE_URL}/#/ce`, {
           waitUntil: "networkidle"
         });
 
         await page.waitForTimeout(3000);
 
-        await page.goto("https://api-test.qrystalos.com/#/ce/agendamiento", {
+        await page.goto(`${QRYSTALOS_BASE_URL}/#/ce/agendamiento`, {
           waitUntil: "networkidle"
         });
 
@@ -1950,12 +1972,12 @@ export const disponibilidadQrystalMozart = async (req, res) => {
 
     manejarModalActualizacion(page);
 
-    await page.goto("https://api-test.qrystalos.com/#/autenticarse");
+    await page.goto(`${QRYSTALOS_BASE_URL}/#/autenticarse`);
 
     const selectorInput = 'input[aria-label="Organización *"]';
     await page.click(selectorInput);
-    await page.fill(selectorInput, 'Pruebas Clinica esperanza');
-    await page.click('div.q-item span:has-text("Pruebas Clinica esperanza")');
+    await page.fill(selectorInput, QRYSTALOS_ORGANIZACION);
+    await page.click(`div.q-item span:has-text("${QRYSTALOS_ORGANIZACION}")`);
 
     await page.locator('input[aria-label="Usuario *"]').fill(usuario);
     await page.locator('input[aria-label="Clave Secreta *"]').fill(clave);
@@ -1964,16 +1986,16 @@ export const disponibilidadQrystalMozart = async (req, res) => {
     await page.waitForLoadState("networkidle");
     await page.waitForTimeout(1500);
 
-    await page.goto("https://api-test.qrystalos.com/#/ce", { waitUntil: "networkidle" });
+    await page.goto(`${QRYSTALOS_BASE_URL}/#/ce`, { waitUntil: "networkidle" });
 
         // Continuar con el flujo normal
-        await page.goto("https://api-test.qrystalos.com/#/ce", {
+        await page.goto(`${QRYSTALOS_BASE_URL}/#/ce`, {
           waitUntil: "networkidle"
         });
 
         await page.waitForTimeout(2000);
 
-        await page.goto("https://api-test.qrystalos.com/#/ce/agendamiento", {
+        await page.goto(`${QRYSTALOS_BASE_URL}/#/ce/agendamiento`, {
           waitUntil: "networkidle"
         });
 
