@@ -12,7 +12,7 @@ dotenv.config();
 const normalizar = (str) => str.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
 
 const MOZART_BASE_URL = "https://api.salud.mozartai.com.co";
-const QRYSTALOS_BASE_URL = "https://qrystalos.com";
+const QRYSTALOS_BASE_URL = "https://clinicaesperanza.qrystalos.com";
 const QRYSTALOS_ORGANIZACION = "Clinica + Esperanza";
 
 let browser, page, session; 
