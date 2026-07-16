@@ -15,6 +15,18 @@ const MOZART_BASE_URL = "https://api.salud.mozartai.com.co";
 const QRYSTALOS_BASE_URL = "https://clinicaesperanza.qrystalos.com";
 const QRYSTALOS_ORGANIZACION = "Clinica + Esperanza";
 
+
+const CENTROS_COSTO = [
+  "411501 - CONSULTA GENERAL Y ESPECIALIZADA -- 4115 - CONSULTA EXTERNA",
+  "411505 - MEDICAMENTOS -- 4115 - CONSULTA EXTERNA",
+  "412501 - IMAGENES DIAGNOSTICAS -- 4125 - APOYO DIAGNOSTICO",
+  "412503 - MEDICAMENTOS -- 4125 - APOYO DIAGNOSTICO",
+  "413501 - LABORATORIO INTERNO -- 4135 - LABORATORIO CLINICO",
+  "413502 - LABORATORIO EXTERNO -- 4135 - LABORATORIO CLINICO",
+  "414501 - PROCEDIMIENTOS -- 4145 - PROCEDIMIENTOS"
+];
+
+
 let browser, page, session; 
 let contextGlobal;
 let pageMozartia;
@@ -107,7 +119,35 @@ const crearCitaParaPersona = async (tenant, persona, sesionMozart) => {
 };
 
 
+/* ======================
+   HELPERS: Centro de costo + Aviso sin servicios
+====================== */
+const seleccionarCentroCosto = async (page, centroCostoTexto) => {
+  const centroCostoInput = page.locator('input[aria-label="Centro de costo"]');
+  await centroCostoInput.click();
 
+  // Limpiar el campo antes de escribir uno nuevo (por si ya había texto)
+  await centroCostoInput.fill('');
+
+  const palabraClave = centroCostoTexto.split(' ')[0]; // el código, ej: "411501"
+  await centroCostoInput.fill(palabraClave);
+
+  const listaOpciones = page.locator('.q-menu .q-item');
+  await listaOpciones.first().waitFor({ state: 'visible' });
+
+  const opcionSeleccionada = listaOpciones.filter({
+    hasText: centroCostoTexto
+  }).first();
+
+  await opcionSeleccionada.click();
+};
+
+const hayAvisoSinServicios = async (page) => {
+  const aviso = page.locator('.doc-note--warning', {
+    hasText: 'Sin servicios para mostrar'
+  });
+  return (await aviso.count()) > 0;
+};
 
 
 
@@ -1038,11 +1078,6 @@ export const AgendarCitaGuajiraCristal = async (req, res) => {
         await page.waitForTimeout(1000);
 
         // Continuar con el flujo normal
-        await page.goto(`${QRYSTALOS_BASE_URL}/#/ce`, {
-          waitUntil: "networkidle"
-        });
-
-        await page.waitForTimeout(1500);
 
         await page.goto(`${QRYSTALOS_BASE_URL}/#/ce/agendamiento`, {
           waitUntil: "networkidle"
@@ -1062,7 +1097,7 @@ export const AgendarCitaGuajiraCristal = async (req, res) => {
         await page.fill('input[placeholder="Doc. Identificación"]', documento);
 
         // esperar que cargue la búsqueda
-        await page.waitForTimeout(1500);
+        await page.waitForTimeout(1200);
 
         const sinDatos = page.locator('.q-table__bottom--nodata');
         if (await sinDatos.count() > 0) {
@@ -1136,27 +1171,66 @@ export const AgendarCitaGuajiraCristal = async (req, res) => {
           });
         }
 
-        await page.waitForTimeout(2500);
+        await page.waitForTimeout(1500);
 
         if (centroCosto) {
-          // 1️⃣ Ubicar input del select
-          const centroCostoInput = page.locator('input[aria-label="Centro de costo"]');
-          await centroCostoInput.click();
-          
-          // 2️⃣ Escribir palabra clave para filtrar
-          const palabraClave = centroCosto.split(' ')[0]; 
-          await centroCostoInput.fill(palabraClave);
 
-          // 3️⃣ Esperar que aparezcan opciones
-          const listaOpciones = page.locator('.q-menu .q-item');
-          await listaOpciones.first().waitFor({ state: 'visible' });
+          const otrosCentros = CENTROS_COSTO.filter(c => c !== centroCosto);
+          const centrosATratar = [centroCosto, ...otrosCentros];
 
-          // 4️⃣ Buscar la opción que contenga el texto deseado
-          const opcionSeleccionada = listaOpciones.filter({
-            hasText: centroCosto // busca coincidencia parcial con todo tu texto
-          }).first();
+          let servicioSeleccionado = false;
+          let centroCostoUsado = null;
 
-          await opcionSeleccionada.click();
+          for (const centro of centrosATratar) {
+
+            await seleccionarCentroCosto(page, centro);
+
+            if (!codigoServicio) {
+              // Si no se exige un servicio específico, con seleccionar el centro basta
+              centroCostoUsado = centro;
+              servicioSeleccionado = true;
+              break;
+            }
+
+            await page.waitForTimeout(100);
+
+            const sinServicios = await hayAvisoSinServicios(page);
+
+            if (sinServicios) {
+              console.log(`⚠️ Sin servicios para el centro de costo "${centro}" - probando el siguiente...`);
+              continue; // pasa al siguiente centro de costo de la lista
+            }
+
+            // Hay servicios disponibles → intentar seleccionar el código pedido
+            const serviciosInput = page.locator('input[aria-label="Servicios"]');
+            await serviciosInput.click();
+            await serviciosInput.fill(codigoServicio);
+
+            const primeraOpcion = page.locator('.q-menu .q-item').first();
+            const apareceOpcion = await primeraOpcion.waitFor({ state: 'visible', timeout: 5000 })
+              .then(() => true)
+              .catch(() => false);
+
+            if (!apareceOpcion) {
+              console.log(`⚠️ El servicio "${codigoServicio}" no aparece para el centro "${centro}" - probando el siguiente...`);
+              continue;
+            }
+
+            await primeraOpcion.click();
+            centroCostoUsado = centro;
+            servicioSeleccionado = true;
+            break;
+          }
+
+          if (codigoServicio && !servicioSeleccionado) {
+            return res.status(404).json({
+              mensaje: "No se encontró un centro de costo con el servicio disponible",
+              codigoServicio,
+              centrosProbados: centrosATratar
+            });
+          }
+
+          console.log(`✅ Centro de costo utilizado: ${centroCostoUsado}`);
         }
 
         const tipoInput = page.locator('input[aria-label="Tipo de Atención"]');
@@ -1182,20 +1256,6 @@ export const AgendarCitaGuajiraCristal = async (req, res) => {
         }).first();
 
         await opcionClase.click();
-
-        if (codigoServicio) {
-
-          const serviciosInput = page.locator('input[aria-label="Servicios"]');
-          await serviciosInput.click();
-          await serviciosInput.fill(codigoServicio);
-
-          // esperar que aparezca el menú con opciones
-          const primeraOpcion = page.locator('.q-menu .q-item').first();
-          await primeraOpcion.waitFor({ state: 'visible' });
-
-          // seleccionar la opción filtrada
-          await primeraOpcion.click();
-        }
 
         // ===== Número de autorización =====
         if (numeroAutorizacion) {
