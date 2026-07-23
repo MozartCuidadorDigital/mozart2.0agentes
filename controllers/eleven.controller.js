@@ -96,7 +96,7 @@ function detectChannel(bodyJson) {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const HMAC_METRICA_FULL = "wsec_6731c0f0f180644772747ba7c29dfe378d4850ae753903f4e157e3c4fc0d0540";
+const HMAC_METRICA_FULL = "wsec_5d09ef28a5cdf0e060f91f6093ff9703314daad8b7b08059165f22a7b70aaf0c";
 const HMAC_METRICA_TAMIZAJE = "wsec_80bfedbbc47e98040b2448c50f7f5558427ad7a9b8290475b884cb248e60341b";
 const HMAC_METRICA_REPOSITORIO = "wsec_350f973717d906870e7570d0ffe2e69ba49e5b57e3ad92127931c2e9ead6845e";
 
