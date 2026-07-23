@@ -3,10 +3,15 @@ import dotenv from "dotenv";
 import llamadasRoutes from "./routes/llamadas.routes.js";
 import whatsappRoutes from "./routes/whatsapp.routes.js";
 import automatizacionRoutes from "./routes/automatizacion.routes.js";
+import elevenRoutes from "./routes/eleven.routes.js";
 
 dotenv.config();
 
 const app = express();
+
+// eleven usa express.raw() por ruta — debe montarse ANTES de express.json()
+app.use("/eleven", elevenRoutes);
+
 app.use(express.json());
 
 // Endpoints principales
